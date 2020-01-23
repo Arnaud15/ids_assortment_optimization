@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 from env import AssortmentEnvironment
 from base_agents import RandomAgent, OptimalAgent
 from ts_agents import ThompsonSamplingAgent
-from utils import print_run, print_regret
+from utils import print_actions, print_regret
 from scipy.stats import uniform
 import numpy as np
 from tqdm import tqdm
@@ -10,9 +10,10 @@ from tqdm import tqdm
 parser = ArgumentParser()
 parser.add_argument("-n", type=int, default=5, help="number of items available")
 parser.add_argument("-k", type=int, default=2, help="size of the assortments")
-parser.add_argument("--horizon", type=int, default=25, help="number of random simulations to carry out with agent")
-parser.add_argument("--nruns", type=int, default=10, help="number of random simulations to carry out with agent")
+parser.add_argument("--horizon", type=int, default=50, help="number of random simulations to carry out with agent")
+parser.add_argument("--nruns", type=int, default=25, help="number of random simulations to carry out with agent")
 parser.add_argument("--verbose", type=int, default=0, help="verbose level for simulations")
+parser.add_argument("--mode", type=str, default="regret", help="verbose level for simulations")
 
 AGENTS = {"random": RandomAgent, "thompson_sampling": ThompsonSamplingAgent}
 
@@ -44,10 +45,13 @@ def run(envnmt, actor, n_steps, verbose=0):
 
 if __name__ == "__main__":
     args = parser.parse_args()
-
+    # TODO think about Bayes regret
     true_preferences = np.concatenate([uniform.rvs(size=args.n),
                                        np.array([1.])])
+    # true_preferences = np.concatenate([np.array([0.1, 0.2, 0.5, 0.5, 0.3]),
+    #                                    np.array([1.])])
     print(f"Initial preferences are: {true_preferences}.")
+    print(f"Run type is {args.mode.upper()}")
     env = AssortmentEnvironment(n=args.n, v=true_preferences)
 
     experimental_results = {}
@@ -56,16 +60,24 @@ if __name__ == "__main__":
         agent_obs = []
         agent_rewards = np.zeros(args.horizon)
         for _ in range(args.nruns):
+            if args.mode == 'regret':
+                run_preferences = np.concatenate([uniform.rvs(size=args.n),
+                                                  np.array([1.])])
+                env.preferences = run_preferences
             obs_run, rewards_run = run(envnmt=env, actor=agent, n_steps=args.horizon, verbose=args.verbose)
             agent_obs += obs_run
             agent_rewards += rewards_run
 
         experimental_results[agent_name] = (agent_obs, agent_rewards / args.nruns)
 
-    print_regret(experimental_results,
-                 true_preferences=true_preferences,
-                 assortment_size=args.k,
-                 n_steps=args.horizon)
+    if args.mode == 'regret':
+        print_regret(experimental_results,
+                     true_preferences=true_preferences,
+                     assortment_size=args.k,
+                     n_steps=args.horizon)
+    else:
+        print_actions(experimental_results,
+                      true_preferences=true_preferences)
 
 else:
     import sys

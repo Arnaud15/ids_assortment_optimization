@@ -41,6 +41,30 @@ def print_regret(exp_results, true_preferences, assortment_size, n_steps):
     plt.close()
 
 
+def print_actions(exp_results, true_preferences):
+
+    plt.figure()
+    preferences = true_preferences[:-1]
+    preferences = preferences / preferences.sum()
+    plt.scatter(np.arange(preferences.shape[0], dtype=int), preferences, label='preferences_normalized')
+    for agent_name, (observations, _) in exp_results.items():
+        item_proposals = defaultdict(int)
+
+        for assortment, item_picked in observations:
+            for item in assortment:
+                item_proposals[item] += 1
+
+        items, proposals = list(zip(*[(item, proposed_count) for item, proposed_count in item_proposals.items()]))
+        proposals = np.array(proposals)
+        proposals = proposals / proposals.sum()
+        plt.scatter(items, proposals, label=f'proposals_normalized_probas for {agent_name} agent')
+
+    plt.legend()
+    plt.grid()
+    plt.savefig(os.path.join(OUTPUTS_FOLDER, 'proposals_vs_preferences.png'))
+    plt.close()
+
+
 def print_run(env, agent, h, observations, rews):
     """
     :param env:
