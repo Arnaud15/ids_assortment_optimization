@@ -14,6 +14,33 @@ def act_optimally(belief, top_k):
     return np.argpartition(belief, -top_k)[-top_k:]
 
 
+def print_regret(exp_results, true_preferences, assortment_size, n_steps):
+    """
+    :param n_steps:
+    :param assortment_size:
+    :param true_preferences:
+    :param exp_results: dict of {agent_name_str: (observations, rewards)}
+        with observations = [(assortment one hot size n+1, item_picked_index<=n)]
+             rewards = [0., 1., 0., 0., ...]
+    :return: plots and saves in OUTPUTS_FOLDER
+    """
+    # Expected rewards profile for optimal agent
+    preferences_top = np.sort(true_preferences)[-(assortment_size + 1):]
+    preferences_top = preferences_top / preferences_top.sum()
+    expected_top_rewards = preferences_top[:assortment_size].sum() * np.ones(n_steps)
+    expected_top_rewards = np.cumsum(expected_top_rewards)
+
+    plt.figure()
+    for agent_name, (_, rewards) in exp_results.items():
+        rewards = np.cumsum(rewards)
+        cumulative_regret = expected_top_rewards - rewards
+        plt.plot(np.arange(n_steps), cumulative_regret, label=f"Regret curve for {agent_name} agent.")
+    plt.legend()
+    plt.grid()
+    plt.savefig(os.path.join(OUTPUTS_FOLDER, 'regret.png'))
+    plt.close()
+
+
 def print_run(env, agent, h, observations, rews):
     """
     :param env:
