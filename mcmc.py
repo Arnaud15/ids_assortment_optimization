@@ -31,12 +31,13 @@ def sample_from_posterior(n_samples, assortments, item_picks, n_observations, n_
                                         p=v_offered / tt.sum(v_offered, axis=1, keepdims=True),
                                         shape=n_observations,
                                         observed=item_picks)
-        for RV in glm_model.basic_RVs:
-            print(RV.name, RV.logp(glm_model.test_point))
-        print(glm_model.logp(glm_model.test_point))
-            # trace_full = pm.sample(1,
-            #                        tune=250,
-            #                        chains=n_samples,
-            #                        progressbar=False)
-        return
-        # return trace_full['v']
+            trace_full = pm.sample(1,
+                                   tune=250,
+                                   chains=n_samples,
+                                   progressbar=False)
+        # for RV in glm_model.basic_RVs:
+        #     print(RV.name, RV.logp(glm_model.test_point))
+        # print(glm_model.logp(glm_model.test_point))
+
+        # return
+        return trace_full['v']
