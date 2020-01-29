@@ -2,6 +2,8 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import defaultdict
+from scipy.optimize import minimize_scalar
+from functools import partial
 
 # TODO refactor plots et prettify them
 
@@ -11,7 +13,39 @@ if not os.path.isdir(OUTPUTS_FOLDER):
 
 
 def act_optimally(belief, top_k):
-    return np.argpartition(belief, -top_k)[-top_k:]
+    if len(belief.shape) <= 1:
+        return np.sort(np.argpartition(belief, -top_k)[-top_k:])
+    else:
+        return np.sort(np.argpartition(belief, -top_k, axis=1)[:, -top_k:], axis=1)
+
+
+def possible_actions(n_items, assortment_size):
+    assert assortment_size >= 1
+    if assortment_size == 1:
+        return [[i] for i in range(n_items)]
+    else:
+        prev_lists = possible_actions(n_items, assortment_size - 1)
+        return [tuple(prev_list + [i]) for prev_list in prev_lists for i in range(prev_list[-1] + 1, n_items)]
+
+
+def information_ratio_(rho, d1, d2, g1, g2):
+    return (d1 * rho + (1-rho) * d2) ** 2 / (g1 * rho + (1 - rho) * g2)
+
+
+def optimized_ratio(d1, d2, g1, g2):
+    func = partial(information_ratio_, d1=d1, d2=d2, g1=g1, g2=g2)
+    solution = minimize_scalar(fun=func, bounds=(0., 1.), method='bounded')
+    return solution.fun, solution.x
+
+
+def expected_reward(preferences, action):
+    """
+    :param preferences: shape (m, n) model parameters
+    :param action: indexes in [0, ..., n-1]
+    :return:
+    """
+    filtered_preferences = preferences[:, action]
+    return (filtered_preferences / (1 + filtered_preferences)).mean()
 
 
 def print_regret(exp_results, true_preferences, assortment_size, n_steps):
@@ -42,7 +76,6 @@ def print_regret(exp_results, true_preferences, assortment_size, n_steps):
 
 
 def print_actions(exp_results, true_preferences):
-
     plt.figure()
     preferences = true_preferences[:-1]
     preferences = preferences / preferences.sum()

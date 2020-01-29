@@ -2,6 +2,7 @@ from argparse import ArgumentParser
 from env import AssortmentEnvironment
 from base_agents import RandomAgent, OptimalAgent
 from ts_agents import ThompsonSamplingAgent
+from ids_agents import InformationDirectedSamplingAgent
 from utils import print_actions, print_regret
 from scipy.stats import uniform
 import numpy as np
@@ -11,11 +12,13 @@ parser = ArgumentParser()
 parser.add_argument("-n", type=int, default=5, help="number of items available")
 parser.add_argument("-k", type=int, default=2, help="size of the assortments")
 parser.add_argument("--horizon", type=int, default=50, help="number of random simulations to carry out with agent")
-parser.add_argument("--nruns", type=int, default=25, help="number of random simulations to carry out with agent")
+parser.add_argument("--nruns", type=int, default=2, help="number of random simulations to carry out with agent")
 parser.add_argument("--verbose", type=int, default=0, help="verbose level for simulations")
 parser.add_argument("--mode", type=str, default="regret", help="verbose level for simulations")
 
-AGENTS = {"random": RandomAgent, "thompson_sampling": ThompsonSamplingAgent}
+AGENTS = {"random": RandomAgent,
+          "thompson_sampling": ThompsonSamplingAgent,
+          "information_directed_sampling": InformationDirectedSamplingAgent}
 
 
 def run(envnmt, actor, n_steps, verbose=0):
@@ -45,7 +48,7 @@ def run(envnmt, actor, n_steps, verbose=0):
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    # TODO think about Bayes regret
+
     true_preferences = np.concatenate([uniform.rvs(size=args.n),
                                        np.array([1.])])
     # true_preferences = np.concatenate([np.array([0.1, 0.2, 0.5, 0.5, 0.3]),
@@ -83,3 +86,5 @@ else:
     import sys
 
     sys.exit("main should be used as a script")
+
+# TODO: rewards =1 for each item + assumption that actions must be assortments of maximal size
