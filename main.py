@@ -3,25 +3,34 @@ from env import AssortmentEnvironment
 from base_agents import RandomAgent, OptimalAgent
 from ts_agents import ThompsonSamplingAgent
 from ids_agents import InformationDirectedSamplingAgent
-from utils import print_actions, print_regret
+from utils import print_actions, print_regret, save_experiment_data
 from scipy.stats import uniform
 import numpy as np
 from tqdm import tqdm
 
 parser = ArgumentParser()
-parser.add_argument("-n", type=int, default=5, help="number of items available")
+parser.add_argument("--agent", type=str, required=True, help="choice of ts, ids, rd")
+parser.add_argument("-n", type=int, default=3, help="number of items available")
 parser.add_argument("-k", type=int, default=2, help="size of the assortments")
-parser.add_argument("--horizon", type=int, default=50, help="number of random simulations to carry out with agent")
+parser.add_argument("--horizon", type=int, default=3, help="number of random simulations to carry out with agent")
 parser.add_argument("--nruns", type=int, default=2, help="number of random simulations to carry out with agent")
 parser.add_argument("--verbose", type=int, default=0, help="verbose level for simulations")
-parser.add_argument("--mode", type=str, default="regret", help="verbose level for simulations")
+parser.add_argument("--fixed_preferences", type=int, default=0,
+                    help="if you want episodes running with pre-defined preferences")
+
+AGENT_IDS = {'ts': "thompson_sampling",
+             'rd': "random",
+             'ids': "information_directed_sampling"}
 
 AGENTS = {"random": RandomAgent,
           "thompson_sampling": ThompsonSamplingAgent,
           "information_directed_sampling": InformationDirectedSamplingAgent}
 
+FIXED_PREFERENCES = np.concatenate([np.array([0.1, 0.2, 0.5, 0.5, 0.3]),
+                                    np.array([1.])])
 
-def run(envnmt, actor, n_steps, verbose=0):
+
+def run_episode(envnmt, actor, n_steps):
     """
     :param envnmt: instance from the AssortmentEnvironment class
     :param actor: instance from the Agent class
@@ -40,47 +49,70 @@ def run(envnmt, actor, n_steps, verbose=0):
         obs[ix] = (assortment, item_selected)
         reward = actor.update(item_selected)  # agent observes item selected, perceive reward and updates its beliefs
         rewards[ix] = reward
-    if verbose:
-        print(
-            f'Simulation terminated successfully: {n_steps:d}steps, {rewards.sum():.2f} total reward, {rewards.mean():.2f} mean reward per step')
+
     return obs, rewards
+
+
+def summarize_run(observations):
+    run_assortments = sum([assortment for assortment, item_picked in observations])
+    run_picks = {item_ix: 0 for item_ix in range(args.n + 1)}
+    for assortment, item_picked in observations:
+        run_picks[item_picked] += 1
+    return {"assortments": run_assortments,
+            "picks": run_picks}
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
+    print(f"arguments are {args}")
+    print(f"Fixed preferences are: {FIXED_PREFERENCES}.")
+    print(f"Preferences used are {'fixed' if args.fixed_preferences else 'random'}")
 
-    true_preferences = np.concatenate([uniform.rvs(size=args.n),
-                                       np.array([1.])])
-    # true_preferences = np.concatenate([np.array([0.1, 0.2, 0.5, 0.5, 0.3]),
-    #                                    np.array([1.])])
-    print(f"Initial preferences are: {true_preferences}.")
-    print(f"Run type is {args.mode.upper()}")
-    env = AssortmentEnvironment(n=args.n, v=true_preferences)
+    # Experiment identifier in storage
+    exp_keys = [args.agent,
+                args.n,
+                args.k,
+                args.horizon]
+    exp_id = '_'.join([str(elt) for elt in exp_keys])
 
-    experimental_results = {}
-    for agent_name, agent_class in AGENTS.items():
-        agent = agent_class(k=args.k, n=args.n)  # TODO init call might need to change
-        agent_obs = []
-        agent_rewards = np.zeros(args.horizon)
-        for _ in range(args.nruns):
-            if args.mode == 'regret':
-                run_preferences = np.concatenate([uniform.rvs(size=args.n),
-                                                  np.array([1.])])
-                env.preferences = run_preferences
-            obs_run, rewards_run = run(envnmt=env, actor=agent, n_steps=args.horizon, verbose=args.verbose)
-            agent_obs += obs_run
-            agent_rewards += rewards_run
+    # Agent init
+    agent_name = AGENT_IDS[args.agent]
+    agent_class = AGENTS[agent_name]
+    agent = agent_class(k=args.k, n=args.n)  # TODO init call might need to change
 
-        experimental_results[agent_name] = (agent_obs, agent_rewards / args.nruns)
+    experiment_data = []
+    for _ in range(args.nruns):
+        run_preferences = FIXED_PREFERENCES
+        if not args.fixed_preferences:
+            run_preferences = np.concatenate([uniform.rvs(size=args.n),
+                                              np.array([1.])])
+        env = AssortmentEnvironment(n=args.n, v=run_preferences)
+        top_preferences = np.sort(run_preferences)[-(args.k + 1):]
+        top_preferences = top_preferences / top_preferences.sum()
+        expected_reward_from_best_action = top_preferences[:args.k].sum()
 
-    if args.mode == 'regret':
-        print_regret(experimental_results,
-                     true_preferences=true_preferences,
-                     assortment_size=args.k,
-                     n_steps=args.horizon)
-    else:
-        print_actions(experimental_results,
-                      true_preferences=true_preferences)
+        run_data = {"best_reward": expected_reward_from_best_action}
+        obs_run, rewards_run = run_episode(envnmt=env, actor=agent, n_steps=args.horizon)
+
+        run_data["rewards"] = rewards_run
+        run_data.update(summarize_run(obs_run))
+
+        experiment_data.append(run_data)
+
+    save_experiment_data(exp_id, experiment_data)
+    # TODO test this
+    # TODO launch this
+    # TODO code printing results
+    print(f"Experiment successfully terminated")
+
+    # if args.mode == 'regret':
+    #     print_regret(experimental_results,
+    #                  true_preferences=true_preferences,
+    #                  assortment_size=args.k,
+    #                  n_steps=args.horizon)
+    # else:
+    #     print_actions(experimental_results,
+    #                   true_preferences=true_preferences)
 
 else:
     import sys

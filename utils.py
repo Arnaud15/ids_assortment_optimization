@@ -4,12 +4,25 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 from scipy.optimize import minimize_scalar
 from functools import partial
+import pickle
 
 # TODO refactor plots et prettify them
 
 OUTPUTS_FOLDER = 'outputs'
 if not os.path.isdir(OUTPUTS_FOLDER):
     os.makedirs(OUTPUTS_FOLDER)
+
+
+def save_experiment_data(exp_id, exp_data):
+    path = os.path.join(OUTPUTS_FOLDER, exp_id + '.pickle')
+    try:
+        with open(path, 'rb') as handle:
+            past_data = pickle.load(handle)
+            exp_data += past_data
+    except FileNotFoundError:
+        pass
+    with open(path, 'wb') as handle:
+        pickle.dump(exp_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def act_optimally(belief, top_k):
@@ -29,7 +42,7 @@ def possible_actions(n_items, assortment_size):
 
 
 def information_ratio_(rho, d1, d2, g1, g2):
-    return (d1 * rho + (1-rho) * d2) ** 2 / (g1 * rho + (1 - rho) * g2)
+    return (d1 * rho + (1 - rho) * d2) ** 2 / (g1 * rho + (1 - rho) * g2)
 
 
 def optimized_ratio(d1, d2, g1, g2):

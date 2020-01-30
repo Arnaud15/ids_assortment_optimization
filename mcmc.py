@@ -40,4 +40,4 @@ def sample_from_posterior(n_samples, assortments, item_picks, n_observations, n_
         # print(glm_model.logp(glm_model.test_point))
 
         # return
-        return trace_full['v']
+    return trace_full['v']

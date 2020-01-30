@@ -41,15 +41,12 @@ def g_full(action, sampled_preferences, opt_actions):
 
 def ids_action_selection(n, k, delta_, g_):
     actions_set = possible_actions(n_items=n, assortment_size=k)
-    # print(f"Possible actions are: {actions_set}")
     min_information_ratio = np.inf
     ids_action = actions_set[0]
     for action1 in actions_set:
         for action2 in actions_set:
             g_a1, g_a2 = g_(action1), g_(action2)
             if (not g_a1) or (not g_a2):
-                # print(f"Oh Oh Oh... {g_a1}, {g_a2}")
-                # print(f"{action1}, {action2}")
                 delta_1, delta_2 = delta_(action1), delta_(action2)
                 if delta_1 < delta_2:
                     value = delta_1
@@ -65,7 +62,6 @@ def ids_action_selection(n, k, delta_, g_):
 
                 action_picked = action1 if np.random.rand() <= rho else action2
             if value < min_information_ratio:
-                # print(f"candidates rho {rho} action {action_picked} value {value}")
                 min_information_ratio = value
                 ids_action = action_picked
 
@@ -93,11 +89,8 @@ class InformationDirectedSamplingAgent(Agent):
 
     def update_r_star(self):
         sorted_beliefs = np.sort(self.prior_belief, axis=1)[:, -self.n_items:]  # shape (m, k)
-        picking_probabilities = sorted_beliefs.sum(1)  # shape (m, )
-        # print(
-        #     f"Probability of picking anything for each theta sampled: {picking_probabilities / (1 + picking_probabilities)}")
+        picking_probabilities = sorted_beliefs.sum(1)
         self.r_star = (picking_probabilities / (1 + picking_probabilities)).mean()
-        # print(f"r star is {self.r_star}")
 
     def update_optimal_actions(self):
         """
@@ -148,7 +141,6 @@ class InformationDirectedSamplingAgent(Agent):
         for item in action:
             assortment[item] = 1.
         self.assortments_given.append(assortment)
-        # print(f"action is {action}")
         return np.array(action)
 
     def reset(self):
