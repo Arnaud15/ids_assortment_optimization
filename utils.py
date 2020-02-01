@@ -12,6 +12,11 @@ OUTPUTS_FOLDER = 'outputs'
 if not os.path.isdir(OUTPUTS_FOLDER):
     os.makedirs(OUTPUTS_FOLDER)
 
+AGENT_IDS = {'ts': "thompson_sampling",
+             'rd': "random",
+             'ids': "information_directed_sampling",
+             'ats': "approximate_thompson_sampling"}
+
 
 def save_experiment_data(exp_id, exp_data):
     path = os.path.join(OUTPUTS_FOLDER, exp_id + '.pickle')
@@ -23,6 +28,12 @@ def save_experiment_data(exp_id, exp_data):
         pass
     with open(path, 'wb') as handle:
         pickle.dump(exp_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def load_experiment_data(name):
+    path = os.path.join(OUTPUTS_FOLDER, name + '.pickle')
+    with open(path, 'rb') as handle:
+        return pickle.load(handle)
 
 
 def act_optimally(belief, top_k):
@@ -61,26 +72,24 @@ def expected_reward(preferences, action):
     return (filtered_preferences / (1 + filtered_preferences)).mean()
 
 
-def print_regret(exp_results, true_preferences, assortment_size, n_steps):
+def print_regret(exp_names):
     """
     :param n_steps:
     :param assortment_size:
     :param true_preferences:
-    :param exp_results: dict of {agent_name_str: (observations, rewards)}
-        with observations = [(assortment one hot size n+1, item_picked_index<=n)]
-             rewards = [0., 1., 0., 0., ...]
+    :param exp_results: list of
     :return: plots and saves in OUTPUTS_FOLDER
     """
-    # Expected rewards profile for optimal agent
-    preferences_top = np.sort(true_preferences)[-(assortment_size + 1):]
-    preferences_top = preferences_top / preferences_top.sum()
-    expected_top_rewards = preferences_top[:assortment_size].sum() * np.ones(n_steps)
-    expected_top_rewards = np.cumsum(expected_top_rewards)
 
     plt.figure()
-    for agent_name, (_, rewards) in exp_results.items():
-        rewards = np.cumsum(rewards)
-        cumulative_regret = expected_top_rewards - rewards
+    for name in exp_names:
+        exp_data = load_experiment_data(name)
+        n_runs = len(exp_data)
+        regrets = sum([run['best_reward'] - run['rewards'] for run in exp_data]) / n_runs
+        n_steps = regrets.shape[0]
+        cumulative_regret = np.cumsum(regrets)
+        agent_name = AGENT_IDS[name.split('_')[0]]
+        print(agent_name, n_runs, n_steps)
         plt.plot(np.arange(n_steps), cumulative_regret, label=f"Regret curve for {agent_name} agent.")
     plt.legend()
     plt.grid()
@@ -173,3 +182,7 @@ def print_run(env, agent, h, observations, rews):
     plt.close()
 
     return
+
+
+if __name__ == "__main__":
+    print_regret(['ids_5_2_80', 'ts_5_2_80', 'ats_5_2_80', 'rd_5_2_80'])
