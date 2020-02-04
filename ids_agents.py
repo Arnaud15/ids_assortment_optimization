@@ -6,6 +6,8 @@ from collections import defaultdict
 import numpy as np
 from functools import partial
 
+N_SAMPLES_V_IDS = 2
+
 
 def delta_full(action, sampled_preferences, r_star):
     return r_star - expected_reward(action=action, preferences=sampled_preferences)
@@ -53,12 +55,15 @@ def v_full(action, sampled_preferences, opt_actions):
 def approximate_ids_action_selection(n, k, delta_, v_):
     v_information_ratios_items = - np.array([delta_([i]) ** 2 / v_([i]) for i in range(n)])
     if np.isinf(v_information_ratios_items.min()):
-        print('yo')
-        import ipdb;
-        ipdb.set_trace()
+        # print('yo')
+        # import ipdb;
+        # ipdb.set_trace()
         v_information_ratios_items = - np.array([delta_([i]) for i in range(n)])
         return np.sort(np.argpartition(v_information_ratios_items, -k)[-k:])
     else:
+        # print('yo')
+        # import ipdb;
+        # ipdb.set_trace()
         return np.sort(np.argpartition(v_information_ratios_items, -k)[-k:])
 
 
@@ -91,6 +96,13 @@ def ids_action_selection(n, k, delta_, g_):
     return ids_action
 
 
+# TODO check out IDS with 16 and see the perf
+# TODO longer horizon for mcmc experiments
+# TODO check if the information ratio is bounded during simulations
+# TODO find a faster package for multinomial logistic regression / alternative to pymc3
+# TODO check out ICLR paper for approximating posterior distributions
+# TODO approx Bayes method for multinomial dis
+# TODO new experiments section in the Overleaf
 class InformationDirectedSamplingAgent(Agent):
     def __init__(self, k, n, m=4):
         """
@@ -198,7 +210,7 @@ class ApproximateInformationDirectedSamplingAgent(EpochSamplingAgent):
         self.v_ = None
         self.r_star = 0.
         self.delta_ = None
-        self.n_samples = 2
+        self.n_samples = N_SAMPLES_V_IDS
         self.prior_belief = self.sample_from_posterior(self.n_samples)
 
     def update_r_star(self):
@@ -232,13 +244,25 @@ class ApproximateInformationDirectedSamplingAgent(EpochSamplingAgent):
                               r_star=self.r_star)
 
     def compute_v(self):
-        self.v_ = partial(v_full,
+        self.v_ = partial(g_full,
                           sampled_preferences=self.prior_belief,
                           opt_actions=self.optimal_actions)
 
     def proposal(self):
         self.prior_belief = self.sample_from_posterior(self.n_samples)
-        action = approximate_ids_action_selection(,)
+        self.update_r_star()
+        self.compute_delta()
+        self.update_optimal_actions()
+        self.compute_v()
+        action = np.array(ids_action_selection(n=self.n_items,
+                                               k=self.assortment_size,
+                                               delta_=self.delta_,
+                                               g_=self.v_))
+        # print(self.posterior_parameters)
+        # print(self.prior_belief)
+        # print(np.array([self.delta_([i]) ** 2 / self.v_([i]) for i in range(self.n_items)]))
+        # import ipdb;
+        # ipdb.set_trace()
         self.current_action = action
         return action
 
@@ -251,7 +275,7 @@ class ApproximateInformationDirectedSamplingAgent(EpochSamplingAgent):
         self.v_ = None
         self.r_star = 0.
         self.delta_ = None
-        self.n_samples = 2
+        self.n_samples = N_SAMPLES_V_IDS
         self.prior_belief = self.sample_from_posterior(self.n_samples)
 
     def update(self, item_selected):

@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 from env import AssortmentEnvironment
 from base_agents import RandomAgent
 from ts_agents import ThompsonSamplingAgent, ApproximateThompsonSamplingAgent
-from ids_agents import InformationDirectedSamplingAgent
+from ids_agents import InformationDirectedSamplingAgent, ApproximateInformationDirectedSamplingAgent
 from utils import save_experiment_data
 from scipy.stats import uniform
 import numpy as np
@@ -12,8 +12,8 @@ parser = ArgumentParser()
 parser.add_argument("--agent", type=str, required=True, help="choice of ts, ids, rd")
 parser.add_argument("-n", type=int, default=5, help="number of items available")
 parser.add_argument("-k", type=int, default=2, help="size of the assortments")
-parser.add_argument("--horizon", type=int, default=80, help="number of random simulations to carry out with agent")
-parser.add_argument("--nruns", type=int, default=250, help="number of random simulations to carry out with agent")
+parser.add_argument("--horizon", type=int, default=250, help="number of random simulations to carry out with agent")
+parser.add_argument("--nruns", type=int, default=50, help="number of random simulations to carry out with agent")
 parser.add_argument("--verbose", type=int, default=0, help="verbose level for simulations")
 parser.add_argument("--fixed_preferences", type=int, default=0,
                     help="if you want episodes running with pre-defined preferences")
@@ -21,7 +21,8 @@ parser.add_argument("--fixed_preferences", type=int, default=0,
 AGENTS = {"rd": RandomAgent,
           "ts": ThompsonSamplingAgent,
           "ids": InformationDirectedSamplingAgent,
-          "ats": ApproximateThompsonSamplingAgent}
+          "ats": ApproximateThompsonSamplingAgent,
+          "avids":ApproximateInformationDirectedSamplingAgent}
 
 FIXED_PREFERENCES = np.concatenate([np.array([0.1, 0.2, 0.5, 0.5, 0.3]),
                                     np.array([1.])])
@@ -95,6 +96,7 @@ if __name__ == "__main__":
 
         experiment_data.append(run_data)
 
+    # print(experiment_data)
     save_experiment_data(exp_id, experiment_data)
     # TODO better code to print results
     print(f"Experiment successfully terminated")

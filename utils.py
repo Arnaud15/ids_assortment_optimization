@@ -15,7 +15,8 @@ if not os.path.isdir(OUTPUTS_FOLDER):
 AGENT_IDS = {'ts': "thompson_sampling",
              'rd': "random",
              'ids': "information_directed_sampling",
-             'ats': "approximate_thompson_sampling"}
+             'ats': "approximate_thompson_sampling",
+             "avids": "approximate_information_directed_sampling"}
 
 
 def save_experiment_data(exp_id, exp_data):
@@ -185,4 +186,4 @@ def print_run(env, agent, h, observations, rews):
 
 
 if __name__ == "__main__":
-    print_regret(['ids_5_2_80', 'ts_5_2_80', 'ats_5_2_80', 'rd_5_2_80'])
+    print_regret(['ats_5_2_500'])
