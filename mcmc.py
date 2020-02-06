@@ -1,6 +1,6 @@
 import pymc3 as pm
 import theano.tensor as tt
-import theano.printing as pt  # for debugging purposes
+# import theano.printing as pt  # for debugging purposes
 import logging
 import warnings
 
@@ -23,10 +23,6 @@ def sample_from_posterior(n_samples, assortments, item_picks, n_observations, n_
             v = tt.concatenate((v, tt.as_tensor([1.])))
             mask = pm.Deterministic('assortments', tt.as_tensor(assortments))
             v_offered = mask * v
-            #     v_printed = pt.Print('vector', attrs = [ 'shape' ])()
-            #     v_printed = pt.Print('vector')(tt.concatenate(v, tt.as_tensor([1.])))
-            #     pick_no_item = pm.Bernoulli('no_item', p=1/(1+tt.sum(v_of_offered, axis=1)), shape=nsim)
-            #     v_printed = pt.Print('vector')(v_of_offered/tt.sum(v_of_offered, axis=1, keepdims=True))
             which_item = pm.Categorical('which_item',
                                         p=v_offered / tt.sum(v_offered, axis=1, keepdims=True),
                                         shape=n_observations,
@@ -35,9 +31,9 @@ def sample_from_posterior(n_samples, assortments, item_picks, n_observations, n_
                                    tune=250,
                                    chains=n_samples,
                                    progressbar=False)
-        # for RV in glm_model.basic_RVs:
-        #     print(RV.name, RV.logp(glm_model.test_point))
-        # print(glm_model.logp(glm_model.test_point))
-
-        # return
     return trace_full['v']
+
+    #     v_printed = pt.Print('vector', attrs = [ 'shape' ])()
+    #     v_printed = pt.Print('vector')(tt.concatenate(v, tt.as_tensor([1.])))
+    #     pick_no_item = pm.Bernoulli('no_item', p=1/(1+tt.sum(v_of_offered, axis=1)), shape=nsim)
+    #     v_printed = pt.Print('vector')(v_of_offered/tt.sum(v_of_offered, axis=1, keepdims=True))

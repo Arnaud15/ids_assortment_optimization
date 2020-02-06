@@ -7,7 +7,7 @@ from collections import defaultdict
 
 
 class ThompsonSamplingAgent(Agent):
-    def __init__(self, k, n):
+    def __init__(self, k, n, **kwargs):
         super().__init__(k, n)
         self.prior_belief = uniform.rvs(size=n)
         self.assortments_given = []
@@ -38,9 +38,9 @@ class ThompsonSamplingAgent(Agent):
         return reward
 
 
-class ApproximateThompsonSamplingAgent(EpochSamplingAgent):
-    def __init__(self, k, n):
-        super().__init__(k, n)
+class EpochSamplingTS(EpochSamplingAgent):
+    def __init__(self, k, n, horizon, correlated_sampling):
+        super().__init__(k, n, horizon=horizon, correlated_sampling=correlated_sampling)
 
     def proposal(self):
         posterior_belief = self.sample_from_posterior(1)
@@ -58,10 +58,16 @@ class ApproximateThompsonSamplingAgent(EpochSamplingAgent):
         reward = self.perceive_reward(item_selected)
         if item_selected == self.n_items:
             self.epoch_ended = True
+            # print(f"former posterior parameters where: {self.posterior_parameters}")
             n_is = [int(ix in self.current_action) for ix in range(self.n_items)]
+            # print("current action", self.current_action)
+            # print("nis", n_is)
             v_is = [self.epoch_picks[i] for i in range(self.n_items)]
+            # print("epoch picks", self.epoch_picks)
+            # print("vis", v_is)
             self.posterior_parameters = [(a + n_is[ix], b + v_is[ix]) for ix, (a, b) in
                                          enumerate(self.posterior_parameters)]
+            # print(f"Now they are {self.posterior_parameters}")
             self.epoch_picks = defaultdict(int)
         else:
             self.epoch_picks[item_selected] += 1

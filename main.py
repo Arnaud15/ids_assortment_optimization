@@ -1,28 +1,28 @@
 from argparse import ArgumentParser
 from env import AssortmentEnvironment
 from base_agents import RandomAgent
-from ts_agents import ThompsonSamplingAgent, ApproximateThompsonSamplingAgent
-from ids_agents import InformationDirectedSamplingAgent, ApproximateInformationDirectedSamplingAgent
+from ts_agents import ThompsonSamplingAgent, EpochSamplingTS
+from ids_agents import InformationDirectedSamplingAgent, EpochSamplingIDS
 from utils import save_experiment_data
 from scipy.stats import uniform
 import numpy as np
 from tqdm import tqdm
 
 parser = ArgumentParser()
-parser.add_argument("--agent", type=str, required=True, help="choice of ts, ids, rd")
+parser.add_argument("--agent", type=str, required=True, help="choice of ts, ids, rd, ets, eids")
 parser.add_argument("-n", type=int, default=5, help="number of items available")
 parser.add_argument("-k", type=int, default=2, help="size of the assortments")
-parser.add_argument("--horizon", type=int, default=250, help="number of random simulations to carry out with agent")
-parser.add_argument("--nruns", type=int, default=50, help="number of random simulations to carry out with agent")
-parser.add_argument("--verbose", type=int, default=0, help="verbose level for simulations")
+parser.add_argument("--horizon", type=int, default=300, help="number of random simulations to carry out with agent")
+parser.add_argument("--nruns", type=int, default=20, help="number of random simulations to carry out with agent")
+parser.add_argument("--cs", type=int, default=1, help="correlated sampling yes or no if epoch sampling agent")
 parser.add_argument("--fixed_preferences", type=int, default=0,
                     help="if you want episodes running with pre-defined preferences")
 
 AGENTS = {"rd": RandomAgent,
           "ts": ThompsonSamplingAgent,
           "ids": InformationDirectedSamplingAgent,
-          "ats": ApproximateThompsonSamplingAgent,
-          "avids":ApproximateInformationDirectedSamplingAgent}
+          "ets": EpochSamplingTS,
+          "eids": EpochSamplingIDS}
 
 FIXED_PREFERENCES = np.concatenate([np.array([0.1, 0.2, 0.5, 0.5, 0.3]),
                                     np.array([1.])])
@@ -33,7 +33,6 @@ def run_episode(envnmt, actor, n_steps):
     :param envnmt: instance from the AssortmentEnvironment class
     :param actor: instance from the Agent class
     :param n_steps: horizon of the run in the environment
-    :param verbose: control how much you want to print info
     :return: (observations history = list of (assortment one-hot array of size N+1, 0<=index<=N of item picked),
     rewards = historical rewards)
     """
@@ -70,12 +69,16 @@ if __name__ == "__main__":
     exp_keys = [args.agent,
                 args.n,
                 args.k,
-                args.horizon]
+                args.horizon,
+                "cs" if args.cs else "nocs"]
     exp_id = '_'.join([str(elt) for elt in exp_keys])
 
     # Agent init
     agent_class = AGENTS[args.agent]
-    agent = agent_class(k=args.k, n=args.n)  # TODO init call might need to change
+    agent = agent_class(k=args.k,
+                        n=args.n,
+                        correlated_sampling=args.cs,
+                        horizon=args.horizon)  # TODO init call might need to change
 
     experiment_data = []
     for _ in range(args.nruns):
@@ -96,19 +99,8 @@ if __name__ == "__main__":
 
         experiment_data.append(run_data)
 
-    # print(experiment_data)
     save_experiment_data(exp_id, experiment_data)
-    # TODO better code to print results
     print(f"Experiment successfully terminated")
-
-    # if args.mode == 'regret':
-    #     print_regret(experimental_results,
-    #                  true_preferences=true_preferences,
-    #                  assortment_size=args.k,
-    #                  n_steps=args.horizon)
-    # else:
-    #     print_actions(experimental_results,
-    #                   true_preferences=true_preferences)
 
 else:
     import sys
