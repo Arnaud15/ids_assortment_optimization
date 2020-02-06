@@ -17,6 +17,8 @@ AGENT_IDS = {'ts': "thompson_sampling",
              'rd': "random",
              'ids': "information directed sampling",
              'ets': "Epoch based thompson sampling",
+             'etscs': "Epoch based TS with Correlated Sampling",
+             "eidscs": "Epoch based IDS with Correlated Sampling",
              "eids": "Epoch based information directed sampling"}
 
 
@@ -93,12 +95,12 @@ def optimized_ratio(d1, d2, g1, g2, discrete=True):
 
 def expected_reward(preferences, action):
     """
-    :param preferences: shape (m, n) model parameters
+    :param preferences: shape (m, n) sampled model parameters
     :param action: indexes in [0, ..., n-1]
     :return:
     """
-    filtered_preferences = preferences[:, action]
-    return (filtered_preferences / (1 + filtered_preferences)).mean()
+    filtered_item_weights = preferences[:, action].sum(1)
+    return (filtered_item_weights / (1 + filtered_item_weights)).mean()
 
 
 def print_regret(exp_names):
@@ -124,6 +126,8 @@ def print_regret(exp_names):
         print(agent_name, n_runs, n_steps)
         plt.plot(np.arange(n_steps), cumulative_regret, label=f"Regret curve for {agent_name} agent.")
 
+    plt.xlabel('Time steps')
+    plt.ylabel('Regret')
     plt.legend()
     plt.grid()
     plt.savefig(os.path.join(OUTPUTS_FOLDER, f'regret_{exp_base_name}.png'))
@@ -173,12 +177,11 @@ if __name__ == "__main__":
     parser.add_argument("--agents", type=str, required=True, help="select agents appearing on the plot", nargs='+')
     parser.add_argument("-n", type=str, default='5', help="number of items in experiments plotted")
     parser.add_argument("-k", type=str, default='2', help="size of the assortments in experiments plotted")
-    parser.add_argument("--horizon", type=str, default='300', help="horizon in experiments plotted")
-    parser.add_argument("--cs", type=int, default=0, help="correlated sampling yes or no if epoch sampling agent")
+    parser.add_argument("--horizon", type=str, default='1000', help="horizon in experiments plotted")
     parser.add_argument("--regret_plot", type=int, default=1, help="whether or not to plot regret curve of experiments")
     parser.add_argument("--action_plot", type=int, default=0, help="whether or not to plot action selection analysis")
     args = parser.parse_args()
-    experiment_base_name = '_'.join([args.n, args.k, args.horizon, "cs" if args.cs else "nocs"])
+    experiment_base_name = '_'.join([args.n, args.k, args.horizon])
     experiments_to_plot = [agent_key + '_' + experiment_base_name for agent_key in args.agents]
     if args.regret_plot:
         print_regret(experiments_to_plot)

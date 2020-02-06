@@ -87,7 +87,7 @@ class EpochSamplingAgent(abc.ABC):
 
 
 class RandomAgent(Agent):
-    def __init__(self, k, n):
+    def __init__(self, k, n, **kwargs):
         super().__init__(k, n)
 
     def act(self):

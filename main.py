@@ -12,9 +12,8 @@ parser = ArgumentParser()
 parser.add_argument("--agent", type=str, required=True, help="choice of ts, ids, rd, ets, eids")
 parser.add_argument("-n", type=int, default=5, help="number of items available")
 parser.add_argument("-k", type=int, default=2, help="size of the assortments")
-parser.add_argument("--horizon", type=int, default=300, help="number of random simulations to carry out with agent")
-parser.add_argument("--nruns", type=int, default=20, help="number of random simulations to carry out with agent")
-parser.add_argument("--cs", type=int, default=1, help="correlated sampling yes or no if epoch sampling agent")
+parser.add_argument("--horizon", type=int, default=1000, help="number of random simulations to carry out with agent")
+parser.add_argument("--nruns", type=int, default=10, help="number of random simulations to carry out with agent")
 parser.add_argument("--fixed_preferences", type=int, default=0,
                     help="if you want episodes running with pre-defined preferences")
 
@@ -66,19 +65,21 @@ if __name__ == "__main__":
     print(f"Preferences used are {'fixed' if args.fixed_preferences else 'random'}")
 
     # Experiment identifier in storage
+    correlated_sampling = args.agent[-2:] == "cs"
+    agent_key = args.agent[:-2] if correlated_sampling else args.agent
+
     exp_keys = [args.agent,
                 args.n,
                 args.k,
-                args.horizon,
-                "cs" if args.cs else "nocs"]
+                args.horizon]
     exp_id = '_'.join([str(elt) for elt in exp_keys])
 
     # Agent init
-    agent_class = AGENTS[args.agent]
+    agent_class = AGENTS[agent_key]
     agent = agent_class(k=args.k,
                         n=args.n,
-                        correlated_sampling=args.cs,
-                        horizon=args.horizon)  # TODO init call might need to change
+                        correlated_sampling=correlated_sampling,
+                        horizon=args.horizon)
 
     experiment_data = []
     for _ in range(args.nruns):
