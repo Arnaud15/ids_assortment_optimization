@@ -107,13 +107,18 @@ def ids_action_selection(n, k, delta_, g_):
     return ids_action
 
 
-# early experiments with IDS and TS on EpochSampling setting and comparison
-# TODO check out IDS with 16 and see the perf
-# TODO longer horizon for mcmc experiments
-# TODO check if the information ratio is bounded during simulations
+# TODO why are the improvements observed from CS not clear with TS? Experiments too small? Confirm that
+# Also try out their exact formula for STD in CS on a large problem instance and check that we get similar results
+# If both of the above are positive, implement approximate IDS for large problem instance and compare
+
+# TODO confirm results with IDS on the small scenario
+# TODO observe bound and think it through
+
+# TODO MCMC algorithms on the small scenario with horizon 300/500
 # TODO find a faster package for multinomial logistic regression / alternative to pymc3
+# TODO explore approx Bayes method for our setting
 # TODO check out ICLR paper for approximating posterior distributions
-# TODO approx Bayes method for multinomial dis
+
 # TODO new experiments section in the Overleaf
 class InformationDirectedSamplingAgent(Agent):
     def __init__(self, k, n, **kwargs):
