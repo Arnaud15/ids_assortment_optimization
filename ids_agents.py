@@ -41,6 +41,7 @@ def g_full(action, sampled_preferences, opt_actions):
                     [probas_given_action[theta_indice, action_ix] for theta_indice in theta_indices])
                 if p_item_a_star_action:
                     g_a += p_item_a_star_action * np.log(p_item_a_star_action / (p_star * p_item_action))
+    assert probs > 0.99, f"{probs}"
     return g_a
 
 
