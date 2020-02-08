@@ -45,8 +45,10 @@ def run_episode(envnmt, actor, n_steps):
         obs[ix] = (assortment, item_selected)
         reward = actor.update(item_selected)  # agent observes item selected, perceive reward and updates its beliefs
         rewards[ix] = reward
-        if ix > (n_steps * 0.9):
+        if ix > (n_steps - 5):
+            print("|" * 15)
             print(f"action is {np.arange(actor.n_items)[assortment]}")
+            print("|" * 15)
 
     return obs, rewards
 
@@ -89,16 +91,16 @@ if __name__ == "__main__":
         if not args.fixed_preferences:
             run_preferences = np.concatenate([uniform.rvs(size=args.n),
                                               np.array([1.])])
-            prefs_str = [f'{run_preference:.2f}' for run_preference in run_preferences]
-            print(f'Initial preferences are :{prefs_str}')
         env = AssortmentEnvironment(n=args.n, v=run_preferences)
-        print(f'Best action is: {run_preferences.argsort()[-(args.k+1):][::-1][1:]}')
         top_preferences = np.sort(run_preferences)[-(args.k + 1):]
         top_preferences = top_preferences / top_preferences.sum()
         expected_reward_from_best_action = top_preferences[:args.k].sum()
 
         run_data = {"best_reward": expected_reward_from_best_action}
         obs_run, rewards_run = run_episode(envnmt=env, actor=agent, n_steps=args.horizon)
+        prefs_str = [f'{run_preference:.2f}' for run_preference in run_preferences]
+        print(f'Initial preferences were :{prefs_str}')
+        print(f'Best action was: {run_preferences.argsort()[-(args.k+1):][::-1][1:]}')
 
         run_data["rewards"] = rewards_run
         run_data.update(summarize_run(obs_run))

@@ -5,6 +5,7 @@ from base_agents import Agent, EpochSamplingAgent
 from collections import defaultdict
 import numpy as np
 from functools import partial
+from random import shuffle
 
 N_SAMPLES_IDS = 16
 DISCRETE_IDS_OPTIMIZATION = True
@@ -68,6 +69,7 @@ def approximate_ids_action_selection(n, k, delta_, v_):
 
 def ids_action_selection(n, k, delta_, g_):
     actions_set = possible_actions(n_items=n, assortment_size=k)
+    shuffle(actions_set)
     min_information_ratio = np.inf
     deltas = [None, None]
     gains = [None, None]
@@ -101,9 +103,9 @@ def ids_action_selection(n, k, delta_, g_):
                 min_information_ratio = value
                 ids_action = action_picked
 
-    # print(f"min information ratio obtained is {min_information_ratio:.4f}")
-    # print(f"with deltas: {[f'{delt:.2f}' for delt in deltas]}")
-    # print(f"and information gains: {[f'{gain:.2f}' for gain in gains]}")
+    print(f"min information ratio obtained is {min_information_ratio:.4f}")
+    print(f"with deltas: {[f'{delt:.2f}' for delt in deltas]}")
+    print(f"and information gains: {[f'{gain:.2f}' for gain in gains]}")
 
     return ids_action
 
@@ -141,7 +143,7 @@ class InformationDirectedSamplingAgent(Agent):
         self.compute_delta()
 
     def update_r_star(self):
-        sorted_beliefs = np.sort(self.prior_belief, axis=1)[:, -self.n_items:]  # shape (m, k)
+        sorted_beliefs = np.sort(self.prior_belief, axis=1)[:, -self.assortment_size:]  # shape (m, k)
         picking_probabilities = sorted_beliefs.sum(1)
         self.r_star = (picking_probabilities / (1 + picking_probabilities)).mean()
 
@@ -232,7 +234,7 @@ class EpochSamplingIDS(EpochSamplingAgent):
         self.prior_belief = self.sample_from_posterior(self.n_samples)
 
     def update_r_star(self):
-        sorted_beliefs = np.sort(self.prior_belief, axis=1)[:, -self.n_items:]  # shape (m, k)
+        sorted_beliefs = np.sort(self.prior_belief, axis=1)[:, -self.assortment_size:]  # shape (m, k)
         picking_probabilities = sorted_beliefs.sum(1)
         self.r_star = (picking_probabilities / (1 + picking_probabilities)).mean()
 
@@ -265,18 +267,18 @@ class EpochSamplingIDS(EpochSamplingAgent):
 
     def proposal(self):
         self.prior_belief = self.sample_from_posterior(self.n_samples)
-        # print(f"belief sampled is: {self.prior_belief}")
+        print(f"belief sampled is: {1000 * self.prior_belief.astype(int)}")
         self.update_r_star()
         self.compute_delta()
         self.update_optimal_actions()
-        # print(f"optimal actions are: {self.optimal_actions}")
+        print(f"optimal actions are: {self.optimal_actions}")
         self.compute_g()
         action = np.array(ids_action_selection(n=self.n_items,
                                                k=self.assortment_size,
                                                delta_=self.delta_,
                                                g_=self.g_))
         self.current_action = action
-        # print("-" * 15)
+        print("-" * 15)
         return action
 
     def reset(self):
@@ -295,16 +297,16 @@ class EpochSamplingIDS(EpochSamplingAgent):
         reward = self.perceive_reward(item_selected)
         if item_selected == self.n_items:
             self.epoch_ended = True
-            # print(f"former posterior parameters where: {self.posterior_parameters}")
+            print(f"former posterior parameters where: {self.posterior_parameters}")
             n_is = [int(ix in self.current_action) for ix in range(self.n_items)]
-            # print("current action", self.current_action)
-            # print("nis", n_is)
+            print("current action", self.current_action)
+            print("nis", n_is)
             v_is = [self.epoch_picks[i] for i in range(self.n_items)]
-            # print("epoch picks", self.epoch_picks)
-            # print("vis", v_is)
+            print("epoch picks", self.epoch_picks)
+            print("vis", v_is)
             self.posterior_parameters = [(a + n_is[ix], b + v_is[ix]) for ix, (a, b) in
                                          enumerate(self.posterior_parameters)]
-            # print(f"Now they are {self.posterior_parameters}")
+            print(f"Now they are {self.posterior_parameters}")
             self.epoch_picks = defaultdict(int)
         else:
             self.epoch_picks[item_selected] += 1

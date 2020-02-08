@@ -59,9 +59,13 @@ def load_experiment_data(name):
 
 def act_optimally(belief, top_k):
     if len(belief.shape) <= 1:
-        return np.sort(np.argpartition(belief, -top_k)[-top_k:])
+        rd_pick = np.random.choice(np.arange(belief.shape[0]), size=top_k, replace=False)
+        std = np.std(belief)
+        return np.sort(np.argpartition(belief, -top_k)[-top_k:]) if std > 1e-4 else rd_pick
     else:
-        return np.sort(np.argpartition(belief, -top_k, axis=1)[:, -top_k:], axis=1)
+        rd_pick = np.array([np.random.choice(np.arange(belief.shape[1]), size=top_k, replace=False) for _ in range(belief.shape[0])])
+        std = np.std(belief, axis=1).mean()
+        return np.sort(np.argpartition(belief, -top_k, axis=1)[:, -top_k:], axis=1) if std > 1e-4 else rd_pick
 
 
 def possible_actions(n_items, assortment_size):
