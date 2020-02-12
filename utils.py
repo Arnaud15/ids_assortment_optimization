@@ -13,13 +13,12 @@ OUTPUTS_FOLDER = 'outputs'
 if not os.path.isdir(OUTPUTS_FOLDER):
     os.makedirs(OUTPUTS_FOLDER)
 
-AGENT_IDS = {'ts': "thompson_sampling",
+AGENT_IDS = {'ts': "Thompson Sampling",
              'rd': "random",
-             'ids': "information directed sampling",
-             'ets': "Epoch based thompson sampling",
+             'ids': "Information Directed Sampling",
+             'ets': "Epoch based Thompson Sampling",
              'etscs': "Epoch based TS with Correlated Sampling",
-             "eidscs": "Epoch based IDS with Correlated Sampling",
-             "eids": "Epoch based information directed sampling"}
+             "eids": "Epoch based IDS"}
 
 
 # TODO CS in agent name for better plots
@@ -63,7 +62,8 @@ def act_optimally(belief, top_k):
         std = np.std(belief)
         return np.sort(np.argpartition(belief, -top_k)[-top_k:]) if std > 1e-4 else rd_pick
     else:
-        rd_pick = np.array([np.random.choice(np.arange(belief.shape[1]), size=top_k, replace=False) for _ in range(belief.shape[0])])
+        rd_pick = np.array(
+            [np.random.choice(np.arange(belief.shape[1]), size=top_k, replace=False) for _ in range(belief.shape[0])])
         std = np.std(belief, axis=1).mean()
         return np.sort(np.argpartition(belief, -top_k, axis=1)[:, -top_k:], axis=1) if std > 1e-4 else rd_pick
 
@@ -112,7 +112,8 @@ def print_regret(exp_names):
     :param exp_names: list of names for experiment data saved in the outputs folder
     :return: regret plots are saved in OUTPUTS_FOLDER
     """
-    exp_base_name = exp_names[0].split('_')[1:]
+    first_exp_name = exp_names[0]
+    exp_base_name = first_exp_name.split('_')[2:] if 'ids' in first_exp_name else first_exp_name.split('_')[2:]
     exp_base_name = '_'.join(exp_base_name)
     print(f"Regret plot for experiments of type: {exp_base_name}")
 
@@ -128,7 +129,8 @@ def print_regret(exp_names):
 
         agent_name = AGENT_IDS[name.split('_')[0]]
         print(agent_name, n_runs, n_steps)
-        plt.plot(np.arange(n_steps), cumulative_regret, label=f"Regret curve for {agent_name} agent.")
+        curve_name = f"Regret curve for {agent_name} agent." if 'ids' not in name else f"Regret curve for {agent_name} agent with {name.split('_')[1]} samples"
+        plt.plot(np.arange(n_steps), cumulative_regret, label=curve_name)
 
     plt.xlabel('Time steps')
     plt.ylabel('Regret')
@@ -181,7 +183,7 @@ if __name__ == "__main__":
     parser.add_argument("--agents", type=str, required=True, help="select agents appearing on the plot", nargs='+')
     parser.add_argument("-n", type=str, default='5', help="number of items in experiments plotted")
     parser.add_argument("-k", type=str, default='2', help="size of the assortments in experiments plotted")
-    parser.add_argument("--horizon", type=str, default='1000', help="horizon in experiments plotted")
+    parser.add_argument("--horizon", type=str, default='500', help="horizon in experiments plotted")
     parser.add_argument("--regret_plot", type=int, default=1, help="whether or not to plot regret curve of experiments")
     parser.add_argument("--action_plot", type=int, default=0, help="whether or not to plot action selection analysis")
     args = parser.parse_args()

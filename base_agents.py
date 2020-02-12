@@ -61,6 +61,8 @@ class EpochSamplingAgent(abc.ABC):
                  (a_, b_) in self.posterior_parameters], 0)
             theta_sampled = np.random.randn(n_samples, 1)
             sample = gaussian_means + theta_sampled * gaussian_stds
+            noise_breaking_ties = np.random.randn(*sample.shape) * 1e-3
+            sample += noise_breaking_ties
             sample = np.clip(sample, a_min=0., a_max=1.0)
             # print(f"sampled posterior parameters are: {sample}")
             return sample

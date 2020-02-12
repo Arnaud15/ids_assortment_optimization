@@ -12,9 +12,11 @@ parser = ArgumentParser()
 parser.add_argument("--agent", type=str, required=True, help="choice of ts, ids, rd, ets, eids")
 parser.add_argument("-n", type=int, default=5, help="number of items available")
 parser.add_argument("-k", type=int, default=2, help="size of the assortments")
-parser.add_argument("--horizon", type=int, default=1000, help="number of random simulations to carry out with agent")
-parser.add_argument("--nruns", type=int, default=10, help="number of random simulations to carry out with agent")
+parser.add_argument("--horizon", type=int, default=500, help="number of random simulations to carry out with agent")
+parser.add_argument("--nruns", type=int, default=2, help="number of random simulations to carry out with agent")
 parser.add_argument("--fixed_preferences", type=int, default=0,
+                    help="if you want episodes running with pre-defined preferences")
+parser.add_argument("--ids_samples", type=int, default=250,
                     help="if you want episodes running with pre-defined preferences")
 
 AGENTS = {"rd": RandomAgent,
@@ -45,10 +47,12 @@ def run_episode(envnmt, actor, n_steps):
         obs[ix] = (assortment, item_selected)
         reward = actor.update(item_selected)  # agent observes item selected, perceive reward and updates its beliefs
         rewards[ix] = reward
-        if ix > (n_steps - 5):
-            print("|" * 15)
-            print(f"action is {np.arange(actor.n_items)[assortment]}")
-            print("|" * 15)
+        # if ix > (n_steps - 2):
+        #     print("|" * 15)
+        #     print(f"action is {np.arange(actor.n_items)[assortment]}")
+        #     print("|" * 15)
+        #     import ipdb;
+        #     ipdb.set_trace()
 
     return obs, rewards
 
@@ -72,18 +76,22 @@ if __name__ == "__main__":
     correlated_sampling = args.agent[-2:] == "cs"
     agent_key = args.agent[:-2] if correlated_sampling else args.agent
 
-    exp_keys = [args.agent,
+    agent_name = f"{args.agent}_{args.ids_samples}" if 'ids' in args.agent else args.agent
+
+    exp_keys = [agent_name,
                 args.n,
                 args.k,
                 args.horizon]
     exp_id = '_'.join([str(elt) for elt in exp_keys])
+    print(f"Name of the agent is {exp_id}")
 
     # Agent init
     agent_class = AGENTS[agent_key]
     agent = agent_class(k=args.k,
                         n=args.n,
                         correlated_sampling=correlated_sampling,
-                        horizon=args.horizon)
+                        horizon=args.horizon,
+                        number_of_ids_samples=args.ids_samples)
 
     experiment_data = []
     for _ in range(args.nruns):
@@ -100,7 +108,7 @@ if __name__ == "__main__":
         obs_run, rewards_run = run_episode(envnmt=env, actor=agent, n_steps=args.horizon)
         prefs_str = [f'{run_preference:.2f}' for run_preference in run_preferences]
         print(f'Initial preferences were :{prefs_str}')
-        print(f'Best action was: {run_preferences.argsort()[-(args.k+1):][::-1][1:]}')
+        print(f'Best action was: {run_preferences.argsort()[-(args.k + 1):][::-1][1:]}')
 
         run_data["rewards"] = rewards_run
         run_data.update(summarize_run(obs_run))

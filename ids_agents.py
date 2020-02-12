@@ -7,7 +7,6 @@ import numpy as np
 from functools import partial
 from random import shuffle
 
-N_SAMPLES_IDS = 16
 DISCRETE_IDS_OPTIMIZATION = True
 
 
@@ -24,13 +23,14 @@ def g_full(action, sampled_preferences, opt_actions):
     """
     g_a = 0.
     probs = 0.
+    M = sampled_preferences.shape[0]
     probas_given_action = sampled_preferences[:, action]
     probas_given_action = probas_given_action / (1 + np.expand_dims(probas_given_action.sum(1), axis=-1))
     no_pick_given_action = 1 - probas_given_action.sum(1)
     p_no_item_action = no_pick_given_action.mean()
     probs += p_no_item_action
     for action_star, (p_star, theta_indices) in opt_actions.items():
-        p_no_item_a_star_action = np.mean([no_pick_given_action[theta_indice] for theta_indice in theta_indices])
+        p_no_item_a_star_action = np.sum([no_pick_given_action[theta_indice] for theta_indice in theta_indices]) / M
         g_a += p_no_item_a_star_action * np.log(p_no_item_a_star_action / (p_star * p_no_item_action))
 
     for action_ix, item_ix in enumerate(action):
@@ -38,11 +38,12 @@ def g_full(action, sampled_preferences, opt_actions):
         if p_item_action:
             probs += p_item_action
             for action_star, (p_star, theta_indices) in opt_actions.items():
-                p_item_a_star_action = np.mean(
-                    [probas_given_action[theta_indice, action_ix] for theta_indice in theta_indices])
+                p_item_a_star_action = np.sum(
+                    [probas_given_action[theta_indice, action_ix] for theta_indice in theta_indices]) / M
                 if p_item_a_star_action:
                     g_a += p_item_a_star_action * np.log(p_item_a_star_action / (p_star * p_item_action))
-    assert probs > 0.99, f"{probs}"
+    assert probs > 0.999, f"{probs}"
+    assert probs < 1.001, f"{probs}"
     return g_a
 
 
@@ -71,17 +72,22 @@ def ids_action_selection(n, k, delta_, g_):
     actions_set = possible_actions(n_items=n, assortment_size=k)
     shuffle(actions_set)
     min_information_ratio = np.inf
+    rho_pick = None
     deltas = [None, None]
     gains = [None, None]
     ids_action = actions_set[0]
+    total_no_info_gain = 0
+    total_no_delta = 0
     for action1 in actions_set:
+        g_a1 = g_(action1)
+        delta_1 = delta_(action1)
+        if not g_a1:
+            total_no_info_gain += 1
+        if not delta_1:
+            total_no_delta += 1
         for action2 in actions_set:
-            g_a1, g_a2 = g_(action1), g_(action2)
-            if np.isnan(g_a1):
-                import ipdb;
-                ipdb.set_trace()
-                g_a1 = g_(action1)
-            delta_1, delta_2 = delta_(action1), delta_(action2)
+            g_a2 = g_(action2)
+            delta_2 = delta_(action2)
             if (not g_a1) or (not g_a2):
                 if delta_1 < delta_2:
                     value = delta_1
@@ -89,6 +95,7 @@ def ids_action_selection(n, k, delta_, g_):
                 else:
                     value = delta_2
                     action_picked = action2
+                rho = 1. if delta_1 < delta_2 else 0.
             else:
                 value, rho = optimized_ratio(d1=delta_1,
                                              d2=delta_2,
@@ -102,20 +109,26 @@ def ids_action_selection(n, k, delta_, g_):
                 gains = g_a1, g_a2
                 min_information_ratio = value
                 ids_action = action_picked
+                rho_pick = rho
 
-    print(f"min information ratio obtained is {min_information_ratio:.4f}")
-    print(f"with deltas: {[f'{delt:.2f}' for delt in deltas]}")
-    print(f"and information gains: {[f'{gain:.2f}' for gain in gains]}")
-
+    # print(f"min information ratio obtained is {min_information_ratio:.4f}")
+    # print(f"with deltas: {[f'{delt:.5f}' for delt in deltas]}")
+    # print(f"and information gains: {[f'{gain:.5f}' for gain in gains]}")
+    # print(f"And rho = {rho_pick}")
+    # print(f"with total no info gain share = {total_no_info_gain / len(actions_set):.2f}")
+    # print(f"with total no delta = {total_no_delta}")
+    # if total_no_info_gain:
+    #     import ipdb
+    #     ipdb.set_trace()
+    # if total_no_delta:
+    #     import ipdb
+    #     ipdb.set_trace()
     return ids_action
 
 
-# TODO why are the improvements observed from CS not clear with TS? Experiments too small? Confirm that
-# Also try out their exact formula for STD in CS on a large problem instance and check that we get similar results
-# If both of the above are positive, implement approximate IDS for large problem instance and compare
-
-# TODO confirm results with IDS on the small scenario
-# TODO observe bound and think it through
+# TODO: correlated sampling, add the exploration bonus (log of timestep)
+# TODO observe rhos in optimization
+# TODO observe bound for information ratio and think it through
 
 # TODO MCMC algorithms on the small scenario with horizon 300/500
 # TODO find a faster package for multinomial logistic regression / alternative to pymc3
@@ -124,15 +137,15 @@ def ids_action_selection(n, k, delta_, g_):
 
 # TODO new experiments section in the Overleaf
 class InformationDirectedSamplingAgent(Agent):
-    def __init__(self, k, n, **kwargs):
+    def __init__(self, k, n, number_of_ids_samples, **kwargs):
         """
         :param k: assortment size
         :param n: number of items available
         :param n_ids_samples: number of posterior samples for IDS
         """
         super().__init__(k, n)
-        self.prior_belief = uniform.rvs(size=(N_SAMPLES_IDS, n))
-        self.n_samples = N_SAMPLES_IDS
+        self.prior_belief = uniform.rvs(size=(number_of_ids_samples, n))
+        self.n_samples = number_of_ids_samples
         self.assortments_given = []
         self.item_picks = []
         self.optimal_actions = None
@@ -224,13 +237,13 @@ class InformationDirectedSamplingAgent(Agent):
 
 # TODO multiple inheritance here?
 class EpochSamplingIDS(EpochSamplingAgent):
-    def __init__(self, k, n, horizon, correlated_sampling):
+    def __init__(self, k, n, horizon, number_of_ids_samples, correlated_sampling):
         super().__init__(k, n, horizon=horizon, correlated_sampling=correlated_sampling)
         self.optimal_actions = None
         self.g_ = None
         self.r_star = 0.
         self.delta_ = None
-        self.n_samples = N_SAMPLES_IDS
+        self.n_samples = number_of_ids_samples
         self.prior_belief = self.sample_from_posterior(self.n_samples)
 
     def update_r_star(self):
@@ -267,18 +280,18 @@ class EpochSamplingIDS(EpochSamplingAgent):
 
     def proposal(self):
         self.prior_belief = self.sample_from_posterior(self.n_samples)
-        print(f"belief sampled is: {1000 * self.prior_belief.astype(int)}")
+        # print(f"belief sampled is: {1000 * self.prior_belief.astype(int)}")
         self.update_r_star()
         self.compute_delta()
         self.update_optimal_actions()
-        print(f"optimal actions are: {self.optimal_actions}")
+        # print(f"optimal actions are: {self.optimal_actions}")
         self.compute_g()
         action = np.array(ids_action_selection(n=self.n_items,
                                                k=self.assortment_size,
                                                delta_=self.delta_,
                                                g_=self.g_))
         self.current_action = action
-        print("-" * 15)
+        # print("-" * 15)
         return action
 
     def reset(self):
@@ -290,23 +303,22 @@ class EpochSamplingIDS(EpochSamplingAgent):
         self.g_ = None
         self.r_star = 0.
         self.delta_ = None
-        self.n_samples = N_SAMPLES_IDS
         self.prior_belief = self.sample_from_posterior(self.n_samples)
 
     def update(self, item_selected):
         reward = self.perceive_reward(item_selected)
         if item_selected == self.n_items:
             self.epoch_ended = True
-            print(f"former posterior parameters where: {self.posterior_parameters}")
+            # print(f"former posterior parameters where: {self.posterior_parameters}")
             n_is = [int(ix in self.current_action) for ix in range(self.n_items)]
-            print("current action", self.current_action)
-            print("nis", n_is)
+            # print("current action", self.current_action)
+            # print("nis", n_is)
             v_is = [self.epoch_picks[i] for i in range(self.n_items)]
-            print("epoch picks", self.epoch_picks)
-            print("vis", v_is)
+            # print("epoch picks", self.epoch_picks)
+            # print("vis", v_is)
             self.posterior_parameters = [(a + n_is[ix], b + v_is[ix]) for ix, (a, b) in
                                          enumerate(self.posterior_parameters)]
-            print(f"Now they are {self.posterior_parameters}")
+            # print(f"Now they are {self.posterior_parameters}")
             self.epoch_picks = defaultdict(int)
         else:
             self.epoch_picks[item_selected] += 1
