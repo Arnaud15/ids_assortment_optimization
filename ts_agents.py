@@ -39,7 +39,7 @@ class ThompsonSamplingAgent(Agent):
 
 
 class EpochSamplingTS(EpochSamplingAgent):
-    def __init__(self, k, n, horizon, correlated_sampling):
+    def __init__(self, k, n, horizon, correlated_sampling, **kwargs):
         super().__init__(k, n, horizon=horizon, correlated_sampling=correlated_sampling)
 
     def proposal(self):

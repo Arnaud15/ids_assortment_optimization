@@ -237,7 +237,7 @@ class InformationDirectedSamplingAgent(Agent):
 
 # TODO multiple inheritance here?
 class EpochSamplingIDS(EpochSamplingAgent):
-    def __init__(self, k, n, horizon, number_of_ids_samples, correlated_sampling):
+    def __init__(self, k, n, horizon, number_of_ids_samples, correlated_sampling, **kwargs):
         super().__init__(k, n, horizon=horizon, correlated_sampling=correlated_sampling)
         self.optimal_actions = None
         self.g_ = None
