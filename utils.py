@@ -175,6 +175,18 @@ def print_actions(exp_names):
     plt.grid()
     plt.close()
 
+def generate_hypersphere(dim, n_samples, norm=1):
+    if norm==1: # TODO ask question about that
+        samples = np.random.rand(n_samples, dim)
+        samples = samples / np.expand_dims(np.abs(samples).sum(1), 1)
+        return samples
+    elif norm==2:
+        samples = np.random.randn(n_samples, dim)
+        samples = samples / np.expand_dims(np.sqrt((samples ** 2).sum(1)), 1)
+        return samples
+    else:
+        raise ValueError
+
 
 if __name__ == "__main__":
     from argparse import ArgumentParser

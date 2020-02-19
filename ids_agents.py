@@ -126,15 +126,8 @@ def ids_action_selection(n, k, delta_, g_):
     return ids_action
 
 
-# TODO: correlated sampling, add the exploration bonus (log of timestep)
-# TODO observe rhos in optimization
-# TODO observe bound for information ratio and think it through
-
-# TODO MCMC algorithms on the small scenario with horizon 300/500
-# TODO find a faster package for multinomial logistic regression / alternative to pymc3
 # TODO explore approx Bayes method for our setting
 # TODO check out ICLR paper for approximating posterior distributions
-
 # TODO new experiments section in the Overleaf
 class InformationDirectedSamplingAgent(Agent):
     def __init__(self, k, n, number_of_ids_samples, **kwargs):
@@ -305,25 +298,6 @@ class EpochSamplingIDS(EpochSamplingAgent):
         self.delta_ = None
         self.prior_belief = self.sample_from_posterior(self.n_samples)
 
-    def update(self, item_selected):
-        reward = self.perceive_reward(item_selected)
-        if item_selected == self.n_items:
-            self.epoch_ended = True
-            # print(f"former posterior parameters where: {self.posterior_parameters}")
-            n_is = [int(ix in self.current_action) for ix in range(self.n_items)]
-            # print("current action", self.current_action)
-            # print("nis", n_is)
-            v_is = [self.epoch_picks[i] for i in range(self.n_items)]
-            # print("epoch picks", self.epoch_picks)
-            # print("vis", v_is)
-            self.posterior_parameters = [(a + n_is[ix], b + v_is[ix]) for ix, (a, b) in
-                                         enumerate(self.posterior_parameters)]
-            # print(f"Now they are {self.posterior_parameters}")
-            self.epoch_picks = defaultdict(int)
-        else:
-            self.epoch_picks[item_selected] += 1
-            self.epoch_ended = False
-        return reward
 
 
 if __name__ == "__main__":

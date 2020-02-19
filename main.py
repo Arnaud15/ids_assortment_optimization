@@ -47,12 +47,6 @@ def run_episode(envnmt, actor, n_steps):
         obs[ix] = (assortment, item_selected)
         reward = actor.update(item_selected)  # agent observes item selected, perceive reward and updates its beliefs
         rewards[ix] = reward
-        # if ix > (n_steps - 2):
-        #     print("|" * 15)
-        #     print(f"action is {np.arange(actor.n_items)[assortment]}")
-        #     print("|" * 15)
-        #     import ipdb;
-        #     ipdb.set_trace()
 
     return obs, rewards
 

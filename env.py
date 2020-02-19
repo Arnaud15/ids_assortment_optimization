@@ -1,5 +1,23 @@
 import numpy as np
 
+class KBandits(object):
+    def __init__(self, k, sigma_obs=0.5, sigma_model=2):
+        self.rewards = np.random.randn(k) * sigma_model
+        self.n_bandits = k
+        self.sigma_obs = sigma_obs
+        self.sigma_model = sigma_model
+    
+    def reset(self):
+        self.rewards = np.random.randn(self.n_bandits) * self.sigma_model
+    
+    def set_model(self, theta):
+        self.rewards = theta
+    
+    def step(self, action):
+        """
+        param: action = index in [0, Nitems-1]
+        """
+        return (np.random.randn(self.n_bandits) * self.sigma_obs + self.rewards)[action]
 
 class AssortmentEnvironment(object):
     def __init__(self, n, v):
