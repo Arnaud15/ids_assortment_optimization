@@ -2,7 +2,24 @@ import numpy as np
 import abc
 from scipy.stats import beta
 from collections import defaultdict
-from hypermodels import Hypermodel, HypermodelG
+from hypermodels import Hypermodel, HypermodelG, LinearModuleAssortmentOpt
+from utils import generate_hypersphere
+from torch.utils.data import DataLoader
+import torch
+
+from argparse import ArgumentParser
+parser2 = ArgumentParser()
+parser2.add_argument("--prior_std", type=float, default=0.5)
+parser2.add_argument("--training_sigmap", type=float, default=10.)
+parser2.add_argument("--training_sigmaobs", type=float, default=0.3)
+parser2.add_argument("--lr", type=float, default=1e-3)
+parser2.add_argument("--model_input_dim", type=int, default=5)
+parser2.add_argument("--nsteps", type=int, default=100)
+parser2.add_argument("--printinterval", type=int, default=33)
+parser2.add_argument("--batch_size", type=int, default=128)
+parser2.add_argument("--nzsamples", type=int, default=32)
+BASE_PARAMS = parser2.parse_args()
+
 
 class Agent(abc.ABC):
     def __init__(self, k, n):
@@ -25,6 +42,21 @@ class Agent(abc.ABC):
         return 1. if item < self.n_items else 0.
 
     @abc.abstractmethod
+    def update(self, item_selected):
+        reward = self.perceive_reward(item_selected)
+        return reward
+
+
+class RandomAgent(Agent):
+    def __init__(self, k, n, **kwargs):
+        super().__init__(k, n)
+
+    def act(self):
+        return np.random.choice(np.arange(self.n_items, dtype=int), size=self.assortment_size, replace=False)
+
+    def reset(self):
+        pass
+
     def update(self, item_selected):
         reward = self.perceive_reward(item_selected)
         return reward
@@ -102,55 +134,59 @@ class EpochSamplingAgent(abc.ABC):
     def proposal(self):
         pass
 
-# TODO implement the neural module for the Assortment optimization task
-# TODO test the neural module in the bandits setting
-# TODO write the f function for the assortment optimization setting
+
 # TODO test TS with hypermodel in the assortment optimization case
 # TODO test IDS with hypermodel
-# TODO figure out this issue of no concentration
 # TODO greedy algorithm test and analysis on larger env
+
+def f_assortment_optimization(thetas, x):
+    """
+    thetas: size (n_z_sampled, model_size)
+    x: size (Batch, assortment_size) long tensor
+    """
+    thetas_selected = torch.index_select(thetas, 1, x.view(-1))
+    thetas_selected = thetas_selected.view(-1, x.size(0), x.size(1))
+    thetas_sum = thetas_selected.sum(-1)
+    return thetas_sum / (1 + thetas_sum)
+
+
 class HypermodelAgent(abc.ABC):
-    def __init__(self, k, n, params, *args, **kwargs):
+    def __init__(self, k, n, params=BASE_PARAMS, n_samples=1):
         self.assortment_size = k
         self.n_items = n
-        self.dataset = []
-        self.params = params 
-        neural_hypermodel = NeuralModule(theta_size=self.n_items,
-                                         model_dim=self.params.model_input_dim,
-                                         num_layers=self.params.num_layers,
-                                         prior_std=self.params.prior_std)
-        g_model = HypermodelG(neural_hypermodel)
-        self.hypermodel = Hypermodel(observation_model_f=f_bandits, 
+        self.current_action = self.n_items
+        self.params = params
+        self.n_samples = n_samples
+        linear_hypermodel = LinearModuleAssortmentOpt(model_size=self.n_items,
+                                                      index_size=self.params.model_input_dim,
+                                                      prior_std=self.params.prior_std)
+        g_model = HypermodelG(linear_hypermodel)
+        self.hypermodel = Hypermodel(observation_model_f=f_assortment_optimization, 
                                      posterior_model_g=g_model,
                                      device='cpu')
-        self.prior_belief = self.hypermodel.sample_posterior(1).numpy().flatten()
-        self.current_action = None
+        self.prior_belief = self.hypermodel.sample_posterior(self.n_samples).numpy()
         self.dataset = []
 
+    @abc.abstractmethod
     def act(self):
-        # import pdb;
-        # pdb.set_trace()
-        # action = np.argmax(self.prior_belief)
-        action = np.random.randint(self.narms)
-        self.current_action = action
-        return action
+        pass
 
     def reset(self):
-        linear_hypermodel = LinearModuleBandits(k_bandits=self.narms,
-                                                model_dim=self.params.model_input_dim,
-                                                prior_std=self.params.prior_std)
+        linear_hypermodel = LinearModuleAssortmentOpt(model_size=self.n_items,
+                                                      index_size=self.params.model_input_dim,
+                                                      prior_std=self.params.prior_std)
         g_model = HypermodelG(linear_hypermodel)
-        self.hypermodel = Hypermodel(observation_model_f=f_bandits, 
+        self.hypermodel = Hypermodel(observation_model_f=f_assortment_optimization, 
                                      posterior_model_g=g_model,
                                      device='cpu')
-        self.prior_belief = self.hypermodel.sample_posterior(1).numpy().flatten()
-        self.current_action = None
+        self.prior_belief = self.hypermodel.sample_posterior(self.n_samples).numpy()
+        self.current_action = self.n_items
         self.dataset = []
 
-    def update(self, reward):
+    def update(self, item_selected):
         data_point = [self.current_action, reward, generate_hypersphere(dim=self.params.model_input_dim,
                                                                         n_samples=1,
-                                                                        norm=1)[0]] 
+                                                                        norm=2)[0]] 
         self.dataset.append(data_point)
         data_loader = DataLoader(self.dataset, batch_size=self.params.batch_size, shuffle=True)
         self.hypermodel.update_g(data_loader,
@@ -160,20 +196,5 @@ class HypermodelAgent(abc.ABC):
                                  sigma_prior=self.params.training_sigmap,
                                  sigma_obs=self.params.training_sigmaobs,
                                  print_every=self.params.printinterval if self.params.printinterval > 0 else self.params.nsteps + 1)
-        self.prior_belief = self.hypermodel.sample_posterior(1).numpy().flatten()
-        return reward
-
-
-class RandomAgent(Agent):
-    def __init__(self, k, n, **kwargs):
-        super().__init__(k, n)
-
-    def act(self):
-        return np.random.choice(np.arange(self.n_items, dtype=int), size=self.assortment_size, replace=False)
-
-    def reset(self):
-        pass
-
-    def update(self, item_selected):
-        reward = self.perceive_reward(item_selected)
-        return reward
+        self.prior_belief = self.hypermodel.sample_posterior(self.n_samples).numpy()
+        return 1. if item_selected < self.n_items else 0.

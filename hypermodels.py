@@ -2,7 +2,9 @@ import torch
 import torch.nn as nn
 import numpy as np
 from torch.optim import SGD
+import torch.nn.functional as F
 from utils import generate_hypersphere
+
 
 """
 Hypermodel contains
@@ -27,31 +29,36 @@ class Hypermodel(object):
         self.g.model = self.g.model.to(device)
 
     def update_g(self, data_loader, num_steps, num_z_samples, learning_rate, sigma_prior, sigma_obs, print_every=5):
-        optimizer = SGD(self.g.model.parameters(), lr=learning_rate, weight_decay=1/(2 * sigma_prior ** 2))
+        optimizer = SGD(self.g.model.parameters(), lr=learning_rate, weight_decay=0.)
         steps_done = 0
         total_loss = 0
         while True:
             for batch in data_loader:
-                # x of size (batch, action_dimension)
+                # x of size (batch, ) bandits or (batch, assortment_size) for assortment optimization
                 # y of size (batch, ), floats
-                # a of size (batch, base_z_dimension)
+                # a of size (batch, index_size = m)
                 x, y, a = batch
                 x = x.to(self.device)
                 y = y.to(self.device)
                 a = a.to(self.device) # shape B, m
-    #             import ipdb;
-    #             ipdb.set_trace()
+
+                # Sampling from the base distribution
                 z_sample = self.g.model.sample_z(num_z_samples) # shape num_z_samples, K, m
-                
-                z_sliced = torch.index_select(z_sample, 1, x) # shape M, B, m -> will change TODO
+                # Noisy observations
+                if len(x.size() < 2):
+                    z_sliced = torch.index_select(z_sample, 1, x) # shape M, B, m
+                else:
+                    z_sliced = torch.index_select(z_sample, 1, x.view(-1))
+                    z_sliced = z_sliced.view(-1, x.size(0), x.size(1)) # shape M, B, m
                 sigAz = sigma_obs * (a.unsqueeze(0) * z_sliced).sum(-1) #shape M, B
+                # Hypermodel mapping
+                difference_samples = self.g.model(z_sample) # of shape M, K
+                # L2 regularization
+                reg = torch.norm(difference_samples, p=2, dim=1)/(2 * sigma_prior ** 2)
+                # Environment model mapping
+                outputs = self.f(difference_samples + self.prior, x)
                 
-                # z_sample2 = self.g.model.sample_z(num_z_samples) #TODO: remove that
-                posterior_samples = self.g.model(z_sample)
-                # outputs = torch.index_select(posteriors, 1, x)
-                outputs = self.f(posterior_samples, x)
-                
-                loss = (((y + sigAz - outputs) ** 2).mean(1)).mean(0) #/ (2 * sigmao ** 2)
+                loss = (((y + sigAz - outputs) ** 2).mean(1) + reg).mean(0) #/ (2 * sigmao ** 2)
                 
                 optimizer.zero_grad()
                 loss.backward()
@@ -112,14 +119,14 @@ class LinearModuleBandits(nn.Module):
     
     def sample_prior(self):
         D = np.random.randn(self.k) * self.prior_std# dim (k, k)
-        B = generate_hypersphere(dim=self.m, n_samples=self.k, norm=1) # dim (k, m)
+        B = generate_hypersphere(dim=self.m, n_samples=self.k, norm=2) # dim (k, m)
         z = np.random.randn(self.k, self.m) # dim (k, m)
         return torch.from_numpy(D * (B * z).sum(-1))
 
 
-class LinearModuleGeneral(nn.Module):
+class LinearModuleAssortmentOpt(nn.Module):
     def __init__(self, model_size, index_size, prior_std):
-        super(LinearModuleGeneral, self).__init__()
+        super(LinearModuleAssortmentOpt, self).__init__()
         self.k = model_size
         self.m = index_size
         self.layer = nn.Linear(in_features=index_size * model_size, out_features=model_size)
@@ -141,13 +148,11 @@ class LinearModuleGeneral(nn.Module):
         z = z.view(z.size(0), -1).contiguous()
         # import pdb;
         # pdb.set_trace()
-        return self.layer(z)
+        return F.sigmoid(self.layer(z))
     
     def sample_z(self, n_samples):
         return torch.randn(n_samples, self.k, self.m)
     
     def sample_prior(self):
-        D = np.random.randn(self.k) * self.prior_std# dim (k, k)
-        B = generate_hypersphere(dim=self.m, n_samples=self.k, norm=1) # dim (k, m)
-        z = np.random.randn(self.k, self.m) # dim (k, m)
-        return torch.from_numpy(D * (B * z).sum(-1))
+        z = np.random.rand(self.k) # dim (k, m)
+        return torch.from_numpy(z)
