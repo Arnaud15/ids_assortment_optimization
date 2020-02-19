@@ -56,11 +56,12 @@ class EpochSamplingTS(EpochSamplingAgent):
 
 
 class HypermodelTS(HypermodelAgent):
-    def __init__(self, k, n, **kwargs):
-        super().__init__(k, n, n_samples=1)
+    def __init__(self, k, n, params, **kwargs):
+        super().__init__(k, n, params, n_samples=1)
 
     def act(self):
-        action = act_optimally(np.squeeze(self.prior_belief), top_k=self.assortment_size)
+        # action = act_optimally(np.squeeze(self.prior_belief), top_k=self.assortment_size)
+        action = np.random.choice(np.arange(self.n_items, dtype=int), size=self.assortment_size, replace=False)
         self.current_action = action
         return action
 
@@ -117,6 +118,7 @@ class ThompsonSamplingAgentBandits(object):
                                  learning_rate=self.params.lr,
                                  sigma_prior=self.params.training_sigmap,
                                  sigma_obs=self.params.training_sigmaobs,
+                                 true_batch_size=self.params.batch_size,
                                  print_every=self.params.printinterval if self.params.printinterval > 0 else self.params.nsteps + 1)
         self.prior_belief = self.hypermodel.sample_posterior(1).numpy().flatten()
         return reward

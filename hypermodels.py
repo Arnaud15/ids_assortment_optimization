@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 from torch.optim import SGD
-import torch.nn.functional as F
 from utils import generate_hypersphere
 
 
@@ -28,28 +27,31 @@ class Hypermodel(object):
         self.device = device
         self.g.model = self.g.model.to(device)
 
-    def update_g(self, data_loader, num_steps, num_z_samples, learning_rate, sigma_prior, sigma_obs, print_every=5):
+    def update_g(self, data_loader, num_steps, num_z_samples, learning_rate, sigma_prior, sigma_obs, true_batch_size=1, print_every=5):
         optimizer = SGD(self.g.model.parameters(), lr=learning_rate, weight_decay=0.)
         steps_done = 0
         total_loss = 0
+        # import pdb;
+        # pdb.set_trace()
         while True:
-            for batch in data_loader:
+            for batch_ix, batch in enumerate(data_loader):
                 # x of size (batch, ) bandits or (batch, assortment_size) for assortment optimization
                 # y of size (batch, ), floats
                 # a of size (batch, index_size = m)
                 x, y, a = batch
+                if batch_ix > 0:
+                    break
                 x = x.to(self.device)
                 y = y.to(self.device)
-                a = a.to(self.device) # shape B, m
-
+                a = a.to(self.device) # shape B, m; B, m * assortment_size for assortment opt
                 # Sampling from the base distribution
                 z_sample = self.g.model.sample_z(num_z_samples) # shape num_z_samples, K, m
                 # Noisy observations
-                if len(x.size() < 2):
+                if len(x.size()) < 2:
                     z_sliced = torch.index_select(z_sample, 1, x) # shape M, B, m
                 else:
-                    z_sliced = torch.index_select(z_sample, 1, x.view(-1))
-                    z_sliced = z_sliced.view(-1, x.size(0), x.size(1)) # shape M, B, m
+                    z_sliced = torch.index_select(z_sample, 1, x.view(-1)) # shape M, B * assortment_size, m)
+                    z_sliced = z_sliced.view(num_z_samples, x.size(0), -1) # shape (M, B, assortmen_size * m)
                 sigAz = sigma_obs * (a.unsqueeze(0) * z_sliced).sum(-1) #shape M, B
                 # Hypermodel mapping
                 difference_samples = self.g.model(z_sample) # of shape M, K
@@ -58,7 +60,7 @@ class Hypermodel(object):
                 # Environment model mapping
                 outputs = self.f(difference_samples + self.prior, x)
                 
-                loss = (((y + sigAz - outputs) ** 2).mean(1) + reg).mean(0) #/ (2 * sigmao ** 2)
+                loss = (((y + sigAz - outputs) ** 2).sum(1) + reg).mean(0) #/ (2 * sigmao ** 2) #TODO discuss the sum and the no sigmao denominator
                 
                 optimizer.zero_grad()
                 loss.backward()
@@ -67,7 +69,7 @@ class Hypermodel(object):
                 total_loss += loss.item()
                 steps_done += 1
                 if (steps_done % print_every) == 0:
-                    print(f"step {steps_done}, loss:{loss.item():2f}")
+                    print(f"step {steps_done}, total loss:{loss.item():.3f}, reg: {reg.mean(0).item():.3f}")
                 if steps_done >= num_steps:
                     return total_loss / num_steps
 
@@ -148,7 +150,7 @@ class LinearModuleAssortmentOpt(nn.Module):
         z = z.view(z.size(0), -1).contiguous()
         # import pdb;
         # pdb.set_trace()
-        return F.sigmoid(self.layer(z))
+        return self.layer(z) # TODO remember the need for a sigmoid in the ids agent
     
     def sample_z(self, n_samples):
         return torch.randn(n_samples, self.k, self.m)

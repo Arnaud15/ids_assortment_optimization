@@ -1,4 +1,4 @@
-from mcmc import sample_from_posterior
+#from mcmc import sample_from_posterior
 from scipy.stats import uniform
 from utils import act_optimally, possible_actions, expected_reward, optimized_ratio
 from base_agents import Agent, EpochSamplingAgent

@@ -20,13 +20,6 @@ AGENT_IDS = {'ts': "Thompson Sampling",
              'etscs': "Epoch based TS with Correlated Sampling",
              "eids": "Epoch based IDS"}
 
-
-# TODO CS in agent name for better plots
-# TODO assert CS yields better correlations
-# TODO compare TS with and without CS
-# TODO Debug IDS
-# TODO manage clear past data
-# TODO nruns in plots
 def save_experiment_data(exp_id, exp_data):
     """
     :param exp_id: name of the experient data

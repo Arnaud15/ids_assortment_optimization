@@ -7,20 +7,6 @@ from utils import generate_hypersphere
 from torch.utils.data import DataLoader
 import torch
 
-from argparse import ArgumentParser
-parser2 = ArgumentParser()
-parser2.add_argument("--prior_std", type=float, default=0.5)
-parser2.add_argument("--training_sigmap", type=float, default=10.)
-parser2.add_argument("--training_sigmaobs", type=float, default=0.3)
-parser2.add_argument("--lr", type=float, default=1e-3)
-parser2.add_argument("--model_input_dim", type=int, default=5)
-parser2.add_argument("--nsteps", type=int, default=100)
-parser2.add_argument("--printinterval", type=int, default=33)
-parser2.add_argument("--batch_size", type=int, default=128)
-parser2.add_argument("--nzsamples", type=int, default=32)
-BASE_PARAMS = parser2.parse_args()
-
-
 class Agent(abc.ABC):
     def __init__(self, k, n):
         self.assortment_size = k
@@ -144,14 +130,14 @@ def f_assortment_optimization(thetas, x):
     thetas: size (n_z_sampled, model_size)
     x: size (Batch, assortment_size) long tensor
     """
-    thetas_selected = torch.index_select(thetas, 1, x.view(-1))
-    thetas_selected = thetas_selected.view(-1, x.size(0), x.size(1))
+    thetas_selected = torch.index_select(thetas, 1, x.view(-1)) # size (n_z_sampled, batch * assort_size)
+    thetas_selected = thetas_selected.view(-1, x.size(0), x.size(1)) #size (n_z_sampled, batch, assort_size)
     thetas_sum = thetas_selected.sum(-1)
-    return thetas_sum / (1 + thetas_sum)
+    return thetas_sum / (1 + thetas_sum) # size (n_z, batch)
 
 
 class HypermodelAgent(abc.ABC):
-    def __init__(self, k, n, params=BASE_PARAMS, n_samples=1):
+    def __init__(self, k, n, params, n_samples=1):
         self.assortment_size = k
         self.n_items = n
         self.current_action = self.n_items
@@ -184,7 +170,8 @@ class HypermodelAgent(abc.ABC):
         self.dataset = []
 
     def update(self, item_selected):
-        data_point = [self.current_action, reward, generate_hypersphere(dim=self.params.model_input_dim,
+        reward =  1. if item_selected < self.n_items else 0.
+        data_point = [self.current_action, reward, generate_hypersphere(dim=self.params.model_input_dim * self.assortment_size,
                                                                         n_samples=1,
                                                                         norm=2)[0]] 
         self.dataset.append(data_point)
@@ -195,6 +182,7 @@ class HypermodelAgent(abc.ABC):
                                  learning_rate=self.params.lr,
                                  sigma_prior=self.params.training_sigmap,
                                  sigma_obs=self.params.training_sigmaobs,
+                                 true_batch_size=self.params.batch_size,
                                  print_every=self.params.printinterval if self.params.printinterval > 0 else self.params.nsteps + 1)
         self.prior_belief = self.hypermodel.sample_posterior(self.n_samples).numpy()
-        return 1. if item_selected < self.n_items else 0.
+        return reward
