@@ -1,4 +1,4 @@
-# from mcmc import sample_from_posterior
+from mcmc import sample_from_posterior
 from scipy.stats import uniform
 from utils import act_optimally, generate_hypersphere
 from base_agents import Agent, EpochSamplingAgent, HypermodelAgent
@@ -124,14 +124,27 @@ class ThompsonSamplingAgentBandits(object):
         return reward
 
 if __name__ == "__main__":
-    # TODO understand why posterior samples do not converge
     from env import KBandits
     H = 30
     k = 5
     sigmao = 0.01 # environment parameters
     sigmap = 1.
     environment = KBandits(k=k, sigma_obs=sigmao, sigma_model=sigmap)
-    from base_agents import BASE_PARAMS
+    
+    from argparse import ArgumentParser
+    parser = ArgumentParser()
+    parser.add_argument("--training_sigmap", type=float, default=0.5)
+    parser.add_argument("--training_sigmaobs", type=float, default=0.5)
+    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--model_input_dim", type=int, default=3)
+    parser.add_argument("--nsteps", type=int, default=25)
+    parser.add_argument("--printinterval", type=int, default=0)
+    parser.add_argument("--batch_size", type=int, default=256)
+    parser.add_argument("--nzsamples", type=int, default=32)
+    parser.add_argument("--prior_std", type=float, default=0.5) #used only for the bandits setting
+    args = parser.parse_args()
+
+
     def run_episode(envnmt, actor, n_steps):
         """
         :param envnmt: instance from the AssortmentEnvironment class
@@ -155,6 +168,6 @@ if __name__ == "__main__":
                 data_test = actor.hypermodel.sample_posterior(1000)
                 print(f"agent posterior sample: {data_test.mean(0)}, {data_test.std(0)}")
         return obs, rewards
-    myagent = ThompsonSamplingAgentBandits(k_bandits=k, params=BASE_PARAMS)
+    myagent = ThompsonSamplingAgentBandits(k_bandits=k, params=args)
     run_episode(environment, actor=myagent, n_steps=H)
     print(f"environment arms = {environment.rewards}")
