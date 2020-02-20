@@ -13,11 +13,10 @@ class Hypermodel(object):
     def __init__(self, observation_model_f, posterior_model_g, device, *args, **kwargs):
         self.g = posterior_model_g
         self.update_device(device)
-        self.prior = self.g.sample_prior().to(self.device)
         self.f = observation_model_f
 
     def sample_posterior(self, n_samples):
-        return self.g.sample_theta(n_samples) + self.prior # NEED TO DISCUSS THIS
+        return self.g.sample_theta(n_samples)
 
     def sample_observations(self, data_point_x, n_samples):
         thetas = self.g.sample_theta(n_samples)
@@ -27,8 +26,8 @@ class Hypermodel(object):
         self.device = device
         self.g.model = self.g.model.to(device)
 
-    def update_g(self, data_loader, num_steps, num_z_samples, learning_rate, sigma_prior, sigma_obs, true_batch_size=1, print_every=5):
-        optimizer = SGD(self.g.model.parameters(), lr=learning_rate, weight_decay=0.)
+    def update_g(self, data_loader, num_steps, num_z_samples, learning_rate, reg_weight, sigma_obs, step_t=1, print_every=5):
+        optimizer = SGD(self.g.model.parameters(), lr=learning_rate)
         steps_done = 0
         total_loss = 0
         # import pdb;
@@ -39,7 +38,7 @@ class Hypermodel(object):
                 # y of size (batch, ), floats
                 # a of size (batch, index_size = m)
                 x, y, a = batch
-                if batch_ix > 0:
+                if batch_ix > 0: #TODO remember this
                     break
                 x = x.to(self.device)
                 y = y.to(self.device)
@@ -56,11 +55,11 @@ class Hypermodel(object):
                 # Hypermodel mapping
                 difference_samples = self.g.model(z_sample) # of shape M, K
                 # L2 regularization
-                reg = torch.norm(difference_samples, p=2, dim=1)/(2 * sigma_prior ** 2)
+                reg = torch.norm(difference_samples, p=2, dim=1) * (reg_weight / step_t)
                 # Environment model mapping
-                outputs = self.f(difference_samples + self.prior, x)
+                outputs = self.f(difference_samples + self.g.model.prior(z_sample), x)
                 
-                loss = (((y + sigAz - outputs) ** 2).sum(1) + reg).mean(0) #/ (2 * sigmao ** 2) #TODO discuss the sum and the no sigmao denominator
+                loss = (((y + sigAz - outputs) ** 2).mean(1) + reg).mean(0) #/ (2 * sigmao ** 2) #TODO discuss the sum and the no sigmao denominator
                 
                 optimizer.zero_grad()
                 loss.backward()
@@ -73,7 +72,7 @@ class Hypermodel(object):
                 if steps_done >= num_steps:
                     return total_loss / num_steps
 
-
+# TODO devices
 # g takes Model as argument
 # Model's got to be a nn.Module implementing:
 # init_parameters()
@@ -84,14 +83,10 @@ class HypermodelG(object):
         self.model = model
         self.model.init_parameters()
     
-    def sample_prior(self):
-        with torch.no_grad():
-            return self.model.sample_prior() 
-
     def sample_theta(self, number_of_thetas):
         with torch.no_grad():
             z = self.model.sample_z(number_of_thetas)
-            return self.model(z)        
+            return self.model(z) + self.model.prior(z)
 
 
 class LinearModuleBandits(nn.Module):
@@ -101,7 +96,8 @@ class LinearModuleBandits(nn.Module):
         self.m = model_dim
         self.C = nn.Parameter(torch.ones(size=(k_bandits, model_dim)))
         self.mu = nn.Parameter(torch.ones(k_bandits))
-        self.prior_std = prior_std
+        self.D = torch.randn(self.k) * prior_std# dim (k, k)
+        self.B = torch.from_numpy(generate_hypersphere(dim=self.m, n_samples=self.k, norm=2)).unsqueeze(0)
     
     def init_parameters(self):
         mu_sampled = torch.randn(self.k) * 0.05
@@ -119,20 +115,21 @@ class LinearModuleBandits(nn.Module):
     def sample_z(self, n_samples):
         return torch.randn(n_samples, self.k, self.m)
     
-    def sample_prior(self):
-        D = np.random.randn(self.k) * self.prior_std# dim (k, k)
-        B = generate_hypersphere(dim=self.m, n_samples=self.k, norm=2) # dim (k, m)
-        z = np.random.randn(self.k, self.m) # dim (k, m)
-        return torch.from_numpy(D * (B * z).sum(-1))
+    def prior(self, z):
+        """
+        z of shape (B, k, m)
+        """
+        return self.D * (self.B * z).sum(-1)
 
 
-class LinearModuleAssortmentOpt(nn.Module):
-    def __init__(self, model_size, index_size, prior_std):
+class LinearModuleAssortmentOpt(nn.Module): # TODO define the prior function correctly
+    def __init__(self, model_size, index_size):
         super(LinearModuleAssortmentOpt, self).__init__()
         self.k = model_size
         self.m = index_size
         self.layer = nn.Linear(in_features=index_size * model_size, out_features=model_size)
-        self.prior_std = prior_std
+        self.D = torch.randn(self.k) * 1.5 # 1.5 gives something ~close to an uniform[0, 1]
+        self.B = torch.from_numpy(generate_hypersphere(dim=self.m, n_samples=self.k, norm=2)).unsqueeze(0)
     
     def init_parameters(self):
         mu_sampled = torch.randn(self.k) * 0.05
@@ -148,13 +145,10 @@ class LinearModuleAssortmentOpt(nn.Module):
         theta of size (batch, model_size)
         """
         z = z.view(z.size(0), -1).contiguous()
-        # import pdb;
-        # pdb.set_trace()
         return self.layer(z) # TODO remember the need for a sigmoid in the ids agent
     
     def sample_z(self, n_samples):
         return torch.randn(n_samples, self.k, self.m)
     
-    def sample_prior(self):
-        z = np.random.rand(self.k) # dim (k, m)
-        return torch.from_numpy(z)
+    def prior(self, z): #TODO unclear if gonna work
+        return torch.sigmoid(self.D * (self.B * z).sum(-1))

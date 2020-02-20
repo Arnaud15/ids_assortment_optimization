@@ -60,8 +60,8 @@ class HypermodelTS(HypermodelAgent):
         super().__init__(k, n, params, n_samples=1)
 
     def act(self):
-        # action = act_optimally(np.squeeze(self.prior_belief), top_k=self.assortment_size)
-        action = np.random.choice(np.arange(self.n_items, dtype=int), size=self.assortment_size, replace=False)
+        action = act_optimally(np.squeeze(self.prior_belief), top_k=self.assortment_size)
+        # action = np.random.choice(np.arange(self.n_items, dtype=int), size=self.assortment_size, replace=False)
         self.current_action = action
         return action
 
@@ -91,6 +91,7 @@ class ThompsonSamplingAgentBandits(object):
 
     def act(self):
         action = np.argmax(self.prior_belief)
+        # action = np.random.randint(self.narms)
         self.current_action = action
         return action
 
@@ -116,16 +117,16 @@ class ThompsonSamplingAgentBandits(object):
                                  num_steps=self.params.nsteps,
                                  num_z_samples=self.params.nzsamples,
                                  learning_rate=self.params.lr,
-                                 sigma_prior=self.params.training_sigmap,
+                                 reg_weight=self.params.reg_weight,
                                  sigma_obs=self.params.training_sigmaobs,
-                                 true_batch_size=self.params.batch_size,
+                                 step_t=len(self.dataset) + 1,
                                  print_every=self.params.printinterval if self.params.printinterval > 0 else self.params.nsteps + 1)
         self.prior_belief = self.hypermodel.sample_posterior(1).numpy().flatten()
         return reward
 
 if __name__ == "__main__":
     from env import KBandits
-    H = 30
+    H = 100
     k = 5
     sigmao = 0.01 # environment parameters
     sigmap = 1.
@@ -133,15 +134,15 @@ if __name__ == "__main__":
     
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument("--training_sigmap", type=float, default=0.5)
-    parser.add_argument("--training_sigmaobs", type=float, default=0.5)
-    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--reg_weight", type=float, default=1.)
+    parser.add_argument("--training_sigmaobs", type=float, default=0.2)
+    parser.add_argument("--lr", type=float, default=1e-2)
     parser.add_argument("--model_input_dim", type=int, default=3)
     parser.add_argument("--nsteps", type=int, default=25)
     parser.add_argument("--printinterval", type=int, default=0)
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--nzsamples", type=int, default=32)
-    parser.add_argument("--prior_std", type=float, default=0.5) #used only for the bandits setting
+    parser.add_argument("--prior_std", type=float, default=1.) #used only for the bandits setting
     args = parser.parse_args()
 
 
@@ -167,6 +168,10 @@ if __name__ == "__main__":
             if ix > n_steps - 150:
                 data_test = actor.hypermodel.sample_posterior(1000)
                 print(f"agent posterior sample: {data_test.mean(0)}, {data_test.std(0)}")
+        # import pdb;
+        # pdb.set_trace()
+        from collections import Counter
+        print(sorted([(key, i) for (key, i) in Counter([arm for (arm, rew) in obs]).items()], key=lambda x:x[0]))
         return obs, rewards
     myagent = ThompsonSamplingAgentBandits(k_bandits=k, params=args)
     run_episode(environment, actor=myagent, n_steps=H)

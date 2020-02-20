@@ -144,8 +144,7 @@ class HypermodelAgent(abc.ABC):
         self.params = params
         self.n_samples = n_samples
         linear_hypermodel = LinearModuleAssortmentOpt(model_size=self.n_items,
-                                                      index_size=self.params.model_input_dim,
-                                                      prior_std=self.params.prior_std)
+                                                      index_size=self.params.model_input_dim)
         g_model = HypermodelG(linear_hypermodel)
         self.hypermodel = Hypermodel(observation_model_f=f_assortment_optimization, 
                                      posterior_model_g=g_model,
@@ -159,8 +158,7 @@ class HypermodelAgent(abc.ABC):
 
     def reset(self):
         linear_hypermodel = LinearModuleAssortmentOpt(model_size=self.n_items,
-                                                      index_size=self.params.model_input_dim,
-                                                      prior_std=self.params.prior_std)
+                                                      index_size=self.params.model_input_dim)
         g_model = HypermodelG(linear_hypermodel)
         self.hypermodel = Hypermodel(observation_model_f=f_assortment_optimization, 
                                      posterior_model_g=g_model,
@@ -180,9 +178,9 @@ class HypermodelAgent(abc.ABC):
                                  num_steps=self.params.nsteps,
                                  num_z_samples=self.params.nzsamples,
                                  learning_rate=self.params.lr,
-                                 sigma_prior=self.params.training_sigmap,
+                                 reg_weight=self.params.reg_weight,
                                  sigma_obs=self.params.training_sigmaobs,
-                                 true_batch_size=self.params.batch_size,
+                                 step_t=len(self.dataset) + 1,
                                  print_every=self.params.printinterval if self.params.printinterval > 0 else self.params.nsteps + 1)
         self.prior_belief = self.hypermodel.sample_posterior(self.n_samples).numpy()
         return reward

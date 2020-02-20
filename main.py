@@ -12,21 +12,20 @@ parser = ArgumentParser()
 parser.add_argument("--agent", type=str, required=True, help="choice of ts, ids, rd, ets, eids")
 parser.add_argument("-n", type=int, default=5, help="number of items available")
 parser.add_argument("-k", type=int, default=2, help="size of the assortments")
-parser.add_argument("--horizon", type=int, default=100, help="number of random simulations to carry out with agent")
+parser.add_argument("--horizon", type=int, default=200, help="number of random simulations to carry out with agent")
 parser.add_argument("--nruns", type=int, default=1, help="number of random simulations to carry out with agent")
 parser.add_argument("--fixed_preferences", type=int, default=0,
                     help="if you want episodes running with pre-defined preferences")
 parser.add_argument("--ids_samples", type=int, default=100,
                     help="if you want episodes running with pre-defined preferences")
-parser.add_argument("--training_sigmap", type=float, default=0.5)
-parser.add_argument("--training_sigmaobs", type=float, default=0.5)
-parser.add_argument("--lr", type=float, default=1e-4)
-parser.add_argument("--model_input_dim", type=int, default=3)
+parser.add_argument("--reg_weight", type=float, default=1.0)
+parser.add_argument("--training_sigmaobs", type=float, default=0.2)
+parser.add_argument("--lr", type=float, default=1e-2)
+parser.add_argument("--model_input_dim", type=int, default=5)
 parser.add_argument("--nsteps", type=int, default=25)
 parser.add_argument("--printinterval", type=int, default=0)
 parser.add_argument("--batch_size", type=int, default=256)
 parser.add_argument("--nzsamples", type=int, default=32)
-parser.add_argument("--prior_std", type=float, default=0.5) #used only for the bandits setting
 
 AGENTS = {"rd": RandomAgent,
           "ts": ThompsonSamplingAgent,
@@ -52,17 +51,22 @@ def run_episode(envnmt, actor, n_steps):
     obs = [0] * n_steps
     # import pdb;
     # pdb.set_trace()
-    for ix in tqdm(range(n_steps)): #TODO put back tqdm here
+    for ix in range(n_steps): #TODO put back tqdm here
         assortment = actor.act()
         item_selected = envnmt.step(assortment)
         obs[ix] = (assortment, item_selected)
         reward = actor.update(item_selected)  # agent observes item selected, perceive reward and updates its beliefs
-        # if (ix > n_steps - 2) or ((ix + 1) % 50 == 0):
-        #     data_test = actor.hypermodel.sample_posterior(1000)
-        #     print(f"agent posterior sample: {data_test.mean(0)}, {data_test.std(0)}")
+        if (ix > n_steps - 2) or ((ix + 1) % 5 == 0):
+            data_test = actor.hypermodel.sample_posterior(1000)
+            print(f"agent posterior sample: {data_test.mean(0)}, {data_test.std(0)}")
         rewards[ix] = reward
-    print(env.preferences)
-
+    from collections import Counter
+    item_proposals = []
+    for assortment, _ in obs:
+        item_proposals += list(assortment)
+    # print(item_proposals)
+    print(sorted([(key, i) for (key, i) in Counter(item_proposals).items()], key=lambda x:x[0]))
+    # print(env.preferences)
     return obs, rewards
 
 
