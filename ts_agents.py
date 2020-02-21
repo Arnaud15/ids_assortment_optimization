@@ -60,8 +60,8 @@ class HypermodelTS(HypermodelAgent):
         super().__init__(k, n, params, n_samples=1)
 
     def act(self):
-        action = act_optimally(np.squeeze(self.prior_belief), top_k=self.assortment_size)
-        # action = np.random.choice(np.arange(self.n_items, dtype=int), size=self.assortment_size, replace=False)
+        # action = act_optimally(np.squeeze(self.prior_belief), top_k=self.assortment_size)
+        action = np.random.choice(np.arange(self.n_items, dtype=int), size=self.assortment_size, replace=False)
         self.current_action = action
         return action
 

@@ -18,9 +18,9 @@ parser.add_argument("--fixed_preferences", type=int, default=0,
                     help="if you want episodes running with pre-defined preferences")
 parser.add_argument("--ids_samples", type=int, default=100,
                     help="if you want episodes running with pre-defined preferences")
-parser.add_argument("--reg_weight", type=float, default=1.0)
+parser.add_argument("--reg_weight", type=float, default=5.0)
 parser.add_argument("--training_sigmaobs", type=float, default=0.2)
-parser.add_argument("--lr", type=float, default=1e-2)
+parser.add_argument("--lr", type=float, default=1e-3)
 parser.add_argument("--model_input_dim", type=int, default=5)
 parser.add_argument("--nsteps", type=int, default=25)
 parser.add_argument("--printinterval", type=int, default=0)
@@ -56,7 +56,7 @@ def run_episode(envnmt, actor, n_steps):
         item_selected = envnmt.step(assortment)
         obs[ix] = (assortment, item_selected)
         reward = actor.update(item_selected)  # agent observes item selected, perceive reward and updates its beliefs
-        if (ix > n_steps - 2) or ((ix + 1) % 5 == 0):
+        if (ix > n_steps - 2) or ((ix + 1) % 10 == 0):
             data_test = actor.hypermodel.sample_posterior(1000)
             print(f"agent posterior sample: {data_test.mean(0)}, {data_test.std(0)}")
         rewards[ix] = reward

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from torch.optim import SGD
+from torch.optim import SGD, Adam
 from utils import generate_hypersphere
 
 
@@ -27,7 +27,7 @@ class Hypermodel(object):
         self.g.model = self.g.model.to(device)
 
     def update_g(self, data_loader, num_steps, num_z_samples, learning_rate, reg_weight, sigma_obs, step_t=1, print_every=5):
-        optimizer = SGD(self.g.model.parameters(), lr=learning_rate)
+        optimizer = Adam(self.g.model.parameters(), lr=learning_rate)#SGD(self.g.model.parameters(), lr=learning_rate)
         steps_done = 0
         total_loss = 0
         # import pdb;
@@ -37,6 +37,8 @@ class Hypermodel(object):
                 # x of size (batch, ) bandits or (batch, assortment_size) for assortment optimization
                 # y of size (batch, ), floats
                 # a of size (batch, index_size = m)
+                # import pdb;
+                # pdb.set_trace()
                 x, y, a = batch
                 if batch_ix > 0: #TODO remember this
                     break
@@ -127,17 +129,21 @@ class LinearModuleAssortmentOpt(nn.Module): # TODO define the prior function cor
         super(LinearModuleAssortmentOpt, self).__init__()
         self.k = model_size
         self.m = index_size
-        self.layer = nn.Linear(in_features=index_size * model_size, out_features=model_size)
+        self.in_layer = nn.Linear(in_features=index_size * model_size, out_features=model_size)
+        self.activation = nn.Sigmoid()
+        self.out_layer = nn.Linear(in_features=model_size, out_features=model_size)
         self.D = torch.randn(self.k) * 1.5 # 1.5 gives something ~close to an uniform[0, 1]
         self.B = torch.from_numpy(generate_hypersphere(dim=self.m, n_samples=self.k, norm=2)).unsqueeze(0)
     
     def init_parameters(self):
-        mu_sampled = torch.randn(self.k) * 0.05
-        c_sampled = torch.randn(self.k, self.k * self.m) * 0.05
+        # mu_sampled = torch.randn(self.k) * 0.05
+        # c_sampled = torch.randn(self.k, self.k * self.m) * 0.05
         # import pdb;
         # pdb.set_trace()
-        self.layer.weight.data = c_sampled
-        self.layer.bias.data = mu_sampled
+        modules = [self.in_layer, self.out_layer]
+        for layer in modules:
+            layer.weight.data = 0.05 * nn.init.xavier_uniform_(layer.weight.data, gain=nn.init.calculate_gain('relu'))
+            layer.bias.data.fill_(0.)
     
     def forward(self, z):
         """
@@ -145,7 +151,10 @@ class LinearModuleAssortmentOpt(nn.Module): # TODO define the prior function cor
         theta of size (batch, model_size)
         """
         z = z.view(z.size(0), -1).contiguous()
-        return self.layer(z) # TODO remember the need for a sigmoid in the ids agent
+        z = self.in_layer(z)
+        z = self.activation(z)
+        z = self.out_layer(z)
+        return z# torch.sigmoid(self.layer(z)) # TODO remember the need for a sigmoid in the ids agent
     
     def sample_z(self, n_samples):
         return torch.randn(n_samples, self.k, self.m)
