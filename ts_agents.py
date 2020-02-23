@@ -87,7 +87,6 @@ class ThompsonSamplingAgentBandits(object):
                                      device='cpu')
         self.prior_belief = self.hypermodel.sample_posterior(1).numpy().flatten()
         self.current_action = None
-        self.dataset = []
 
     def act(self):
         action = np.argmax(self.prior_belief)
@@ -160,12 +159,12 @@ if __name__ == "__main__":
 
         for ix in range(n_steps):
             arm_selected = actor.act()
-            print(f"arm selected is {arm_selected}")
+            #print(f"arm selected is {arm_selected}")
             reward = envnmt.step(arm_selected)
             obs[ix] = (arm_selected, reward)
             reward = actor.update(reward)  # agent observes item selected, perceive reward and updates its beliefs
             rewards[ix] = reward
-            if ix > n_steps - 150:
+            if (ix > n_steps - 150) and (ix % 9 == 0):
                 data_test = actor.hypermodel.sample_posterior(1000)
                 print(f"agent posterior sample: {data_test.mean(0)}, {data_test.std(0)}")
         # import pdb;

@@ -18,10 +18,10 @@ parser.add_argument("--fixed_preferences", type=int, default=0,
                     help="if you want episodes running with pre-defined preferences")
 parser.add_argument("--ids_samples", type=int, default=100,
                     help="if you want episodes running with pre-defined preferences")
-parser.add_argument("--reg_weight", type=float, default=5.0)
+parser.add_argument("--reg_weight", type=float, default=1.0)
 parser.add_argument("--training_sigmaobs", type=float, default=0.2)
-parser.add_argument("--lr", type=float, default=1e-3)
-parser.add_argument("--model_input_dim", type=int, default=5)
+parser.add_argument("--lr", type=float, default=1e-2)# 1e-3 and reg 5 for mlp
+parser.add_argument("--model_input_dim", type=int, default=3)
 parser.add_argument("--nsteps", type=int, default=25)
 parser.add_argument("--printinterval", type=int, default=0)
 parser.add_argument("--batch_size", type=int, default=256)
@@ -49,24 +49,20 @@ def run_episode(envnmt, actor, n_steps):
     actor.reset()  # Resets the internal state of the agent at the start of simulations (prior beliefs, etc...)
     rewards = np.zeros(n_steps)
     obs = [0] * n_steps
-    # import pdb;
-    # pdb.set_trace()
     for ix in range(n_steps): #TODO put back tqdm here
         assortment = actor.act()
         item_selected = envnmt.step(assortment)
         obs[ix] = (assortment, item_selected)
         reward = actor.update(item_selected)  # agent observes item selected, perceive reward and updates its beliefs
-        if (ix > n_steps - 2) or ((ix + 1) % 10 == 0):
-            data_test = actor.hypermodel.sample_posterior(1000)
+        if (ix > n_steps - 2) or ((ix + 1) % 25 == 0) or (not ix):
+            data_test = actor.sample_from_posterior(1000)
             print(f"agent posterior sample: {data_test.mean(0)}, {data_test.std(0)}")
         rewards[ix] = reward
     from collections import Counter
     item_proposals = []
     for assortment, _ in obs:
         item_proposals += list(assortment)
-    # print(item_proposals)
     print(sorted([(key, i) for (key, i) in Counter(item_proposals).items()], key=lambda x:x[0]))
-    # print(env.preferences)
     return obs, rewards
 
 
@@ -119,8 +115,6 @@ if __name__ == "__main__":
         expected_reward_from_best_action = top_preferences[:args.k].sum()
 
         run_data = {"best_reward": expected_reward_from_best_action}
-        # import pdb;
-        # pdb.set_trace()
         obs_run, rewards_run = run_episode(envnmt=env, actor=agent, n_steps=args.horizon)
         prefs_str = [f'{run_preference:.2f}' for run_preference in run_preferences]
         print(f'Initial preferences were :{prefs_str}')

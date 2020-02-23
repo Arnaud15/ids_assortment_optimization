@@ -130,7 +130,39 @@ class LinearModuleAssortmentOpt(nn.Module): # TODO define the prior function cor
         self.k = model_size
         self.m = index_size
         self.in_layer = nn.Linear(in_features=index_size * model_size, out_features=model_size)
-        self.activation = nn.Sigmoid()
+        self.D = torch.randn(self.k) * 1.5 # 1.5 gives something ~close to an uniform[0, 1]
+        self.B = torch.from_numpy(generate_hypersphere(dim=self.m, n_samples=self.k, norm=2)).unsqueeze(0)
+    
+    def init_parameters(self):
+        # mu_sampled = torch.randn(self.k) * 0.05
+        # c_sampled = torch.randn(self.k, self.k * self.m) * 0.05
+        # import pdb;
+        # pdb.set_trace()
+        self.in_layer.weight.data = 0.05 * torch.randn(self.k, self.k * self.m)
+        self.in_layer.bias.data.fill_(0.)
+    
+    def forward(self, z):
+        """
+        z of size (batch, model_size, index_size)
+        theta of size (batch, model_size)
+        """
+        z = z.view(z.size(0), -1).contiguous()
+        return self.in_layer(z) # torch.sigmoid(self.layer(z)) # TODO remember the need for a sigmoid in the ids agent
+    
+    def sample_z(self, n_samples):
+        return torch.randn(n_samples, self.k, self.m)
+    
+    def prior(self, z): #TODO unclear if gonna work
+        return self.D * (self.B * z).sum(-1)
+
+
+class NeuralModuleAssortmentOpt(nn.Module): # TODO define the prior function correctly
+    def __init__(self, model_size, index_size):
+        super(NeuralModuleAssortmentOpt, self).__init__()
+        self.k = model_size
+        self.m = index_size
+        self.in_layer = nn.Linear(in_features=index_size * model_size, out_features=model_size)
+        self.activation = nn.ReLU()
         self.out_layer = nn.Linear(in_features=model_size, out_features=model_size)
         self.D = torch.randn(self.k) * 1.5 # 1.5 gives something ~close to an uniform[0, 1]
         self.B = torch.from_numpy(generate_hypersphere(dim=self.m, n_samples=self.k, norm=2)).unsqueeze(0)
@@ -154,10 +186,10 @@ class LinearModuleAssortmentOpt(nn.Module): # TODO define the prior function cor
         z = self.in_layer(z)
         z = self.activation(z)
         z = self.out_layer(z)
-        return z# torch.sigmoid(self.layer(z)) # TODO remember the need for a sigmoid in the ids agent
+        return z # torch.sigmoid(self.layer(z)) # TODO remember the need for a sigmoid in the ids agent
     
     def sample_z(self, n_samples):
         return torch.randn(n_samples, self.k, self.m)
     
     def prior(self, z): #TODO unclear if gonna work
-        return torch.sigmoid(self.D * (self.B * z).sum(-1))
+        return self.D * (self.B * z).sum(-1)

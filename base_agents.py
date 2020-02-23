@@ -2,10 +2,12 @@ import numpy as np
 import abc
 from scipy.stats import beta
 from collections import defaultdict
-from hypermodels import Hypermodel, HypermodelG, LinearModuleAssortmentOpt
+from hypermodels import *
 from utils import generate_hypersphere
 from torch.utils.data import DataLoader
 import torch
+
+SELECTED_HYPERMODEL = LinearModuleAssortmentOpt
 
 class Agent(abc.ABC):
     def __init__(self, k, n):
@@ -127,9 +129,10 @@ class EpochSamplingAgent(abc.ABC):
 
 def f_assortment_optimization(thetas, x):
     """
-    thetas: size (n_z_sampled, model_size)
+    thetas: size (n_z_sampled, model_size) UNNORMALIZED
     x: size (Batch, assortment_size) long tensor
     """
+    thetas = torch.sigmoid(thetas)
     thetas_selected = torch.index_select(thetas, 1, x.view(-1)) # size (n_z_sampled, batch * assort_size)
     thetas_selected = thetas_selected.view(-1, x.size(0), x.size(1)) #size (n_z_sampled, batch, assort_size)
     thetas_sum = thetas_selected.sum(-1)
@@ -143,27 +146,30 @@ class HypermodelAgent(abc.ABC):
         self.current_action = self.n_items
         self.params = params
         self.n_samples = n_samples
-        linear_hypermodel = LinearModuleAssortmentOpt(model_size=self.n_items,
-                                                      index_size=self.params.model_input_dim)
+        linear_hypermodel = SELECTED_HYPERMODEL(model_size=self.n_items,
+                                                index_size=self.params.model_input_dim)
         g_model = HypermodelG(linear_hypermodel)
         self.hypermodel = Hypermodel(observation_model_f=f_assortment_optimization, 
                                      posterior_model_g=g_model,
                                      device='cpu')
-        self.prior_belief = self.hypermodel.sample_posterior(self.n_samples).numpy()
+        self.prior_belief = self.sample_from_posterior()
         self.dataset = []
 
     @abc.abstractmethod
     def act(self):
         pass
+    
+    def sample_from_posterior(self, nsamples=1):
+        return torch.sigmoid(self.hypermodel.sample_posterior(nsamples)).numpy()
 
     def reset(self):
-        linear_hypermodel = LinearModuleAssortmentOpt(model_size=self.n_items,
+        linear_hypermodel = SELECTED_HYPERMODEL(model_size=self.n_items,
                                                       index_size=self.params.model_input_dim)
         g_model = HypermodelG(linear_hypermodel)
         self.hypermodel = Hypermodel(observation_model_f=f_assortment_optimization, 
                                      posterior_model_g=g_model,
                                      device='cpu')
-        self.prior_belief = self.hypermodel.sample_posterior(self.n_samples).numpy()
+        self.prior_belief = self.sample_from_posterior() 
         self.current_action = self.n_items
         self.dataset = []
 
@@ -174,6 +180,8 @@ class HypermodelAgent(abc.ABC):
                                                                         norm=2)[0]] 
         self.dataset.append(data_point)
         data_loader = DataLoader(self.dataset, batch_size=self.params.batch_size, shuffle=True)
+        # import pdb;
+        # pdb.set_trace()
         self.hypermodel.update_g(data_loader,
                                  num_steps=self.params.nsteps,
                                  num_z_samples=self.params.nzsamples,
@@ -182,5 +190,5 @@ class HypermodelAgent(abc.ABC):
                                  sigma_obs=self.params.training_sigmaobs,
                                  step_t=len(self.dataset) + 1,
                                  print_every=self.params.printinterval if self.params.printinterval > 0 else self.params.nsteps + 1)
-        self.prior_belief = self.hypermodel.sample_posterior(self.n_samples).numpy()
+        self.prior_belief = self.sample_from_posterior() 
         return reward
