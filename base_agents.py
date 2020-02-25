@@ -22,6 +22,14 @@ class Agent(abc.ABC):
     def reset(self):
         pass
 
+    @abc.abstractmethod
+    def sample_from_posterior(self, n_samples):
+        """
+        input is number of samples
+        output of shape (n_samples, n_items) are the samples beliefs in (0, 1) for each sample, item
+        """
+        pass
+
     def perceive_reward(self, item):
         """
         :param item:  index in [0, n-1], "no item" is index n
@@ -49,23 +57,20 @@ class RandomAgent(Agent):
         reward = self.perceive_reward(item_selected)
         return reward
 
+    def sample_from_posterior(self, n_samples):
+        return np.random.rand(n_samples, self.n_items)
 
-class EpochSamplingAgent(abc.ABC):
+
+class EpochSamplingAgent(Agent, abc.ABC):
     def __init__(self, k, n, horizon=None, correlated_sampling=False):
-        self.assortment_size = k
-        self.n_items = n
-        self.epoch_ended = True
-        self.current_action = self.n_items
-        self.epoch_picks = defaultdict(int)
-        self.posterior_parameters = [(1, 1) for _ in range(self.n_items)]
+        Agent.__init__(self, k, n)
         self.correlated_sampling = correlated_sampling
         self.T = horizon
+        self.reset()
 
     def act(self):
         if self.epoch_ended:
-            # print("Customer picked no item and we make a new proposal")
             action = self.proposal()
-            # print(f"action picked is {action}")
         else:
             action = self.current_action
         return action
@@ -87,16 +92,11 @@ class EpochSamplingAgent(abc.ABC):
             # print(f"sampled posterior parameters are: {sample}")
             return sample
 
-    def perceive_reward(self, item):
-        """
-        :param item:  index in [0, n-1], "no item" is index n
-        :return: reward of 1. if any item is selected, 0. otherwise
-        """
-        return 1. if item < self.n_items else 0.
-
-    @abc.abstractmethod
     def reset(self):
-        pass
+        self.epoch_ended = True
+        self.current_action = self.n_items
+        self.epoch_picks = defaultdict(int)
+        self.posterior_parameters = [(1, 1) for _ in range(self.n_items)]
 
     def update(self, item_selected):
         reward = self.perceive_reward(item_selected)
@@ -122,11 +122,6 @@ class EpochSamplingAgent(abc.ABC):
     def proposal(self):
         pass
 
-
-# TODO test TS with hypermodel in the assortment optimization case
-# TODO test IDS with hypermodel
-# TODO greedy algorithm test and analysis on larger env
-
 def f_assortment_optimization(thetas, x):
     """
     thetas: size (n_z_sampled, model_size) UNNORMALIZED
@@ -139,49 +134,34 @@ def f_assortment_optimization(thetas, x):
     return thetas_sum / (1 + thetas_sum) # size (n_z, batch)
 
 
-class HypermodelAgent(abc.ABC):
+class HypermodelAgent(Agent, abc.ABC):
     def __init__(self, k, n, params, n_samples=1):
-        self.assortment_size = k
-        self.n_items = n
-        self.current_action = self.n_items
+        Agent.__init__(self, k, n)
         self.params = params
         self.n_samples = n_samples
+        self.reset()
+
+    def sample_from_posterior(self, nsamples=1):
+        return torch.sigmoid(self.hypermodel.sample_posterior(nsamples)).numpy()
+
+    def reset(self):
         linear_hypermodel = SELECTED_HYPERMODEL(model_size=self.n_items,
                                                 index_size=self.params.model_input_dim)
         g_model = HypermodelG(linear_hypermodel)
         self.hypermodel = Hypermodel(observation_model_f=f_assortment_optimization, 
                                      posterior_model_g=g_model,
                                      device='cpu')
-        self.prior_belief = self.sample_from_posterior()
-        self.dataset = []
-
-    @abc.abstractmethod
-    def act(self):
-        pass
-    
-    def sample_from_posterior(self, nsamples=1):
-        return torch.sigmoid(self.hypermodel.sample_posterior(nsamples)).numpy()
-
-    def reset(self):
-        linear_hypermodel = SELECTED_HYPERMODEL(model_size=self.n_items,
-                                                      index_size=self.params.model_input_dim)
-        g_model = HypermodelG(linear_hypermodel)
-        self.hypermodel = Hypermodel(observation_model_f=f_assortment_optimization, 
-                                     posterior_model_g=g_model,
-                                     device='cpu')
-        self.prior_belief = self.sample_from_posterior() 
+        self.prior_belief = self.sample_from_posterior(self.n_samples)
         self.current_action = self.n_items
         self.dataset = []
 
     def update(self, item_selected):
-        reward =  1. if item_selected < self.n_items else 0.
+        reward = self.perceive_reward(item_selected) 
         data_point = [self.current_action, reward, generate_hypersphere(dim=self.params.model_input_dim * self.assortment_size,
                                                                         n_samples=1,
                                                                         norm=2)[0]] 
         self.dataset.append(data_point)
         data_loader = DataLoader(self.dataset, batch_size=self.params.batch_size, shuffle=True)
-        # import pdb;
-        # pdb.set_trace()
         self.hypermodel.update_g(data_loader,
                                  num_steps=self.params.nsteps,
                                  num_z_samples=self.params.nzsamples,
@@ -190,5 +170,8 @@ class HypermodelAgent(abc.ABC):
                                  sigma_obs=self.params.training_sigmaobs,
                                  step_t=len(self.dataset) + 1,
                                  print_every=self.params.printinterval if self.params.printinterval > 0 else self.params.nsteps + 1)
-        self.prior_belief = self.sample_from_posterior() 
+        self.prior_belief = self.sample_from_posterior(self.n_samples)
         return reward
+    
+    def act(self):
+        raise NotImplementedError

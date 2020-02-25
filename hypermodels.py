@@ -5,10 +5,6 @@ from torch.optim import SGD, Adam
 from utils import generate_hypersphere
 
 
-"""
-Hypermodel contains
-ready-to-use functions to update g and sample
-"""
 class Hypermodel(object):
     def __init__(self, observation_model_f, posterior_model_g, device, *args, **kwargs):
         self.g = posterior_model_g
@@ -30,15 +26,11 @@ class Hypermodel(object):
         optimizer = Adam(self.g.model.parameters(), lr=learning_rate)#SGD(self.g.model.parameters(), lr=learning_rate)
         steps_done = 0
         total_loss = 0
-        # import pdb;
-        # pdb.set_trace()
         while True:
             for batch_ix, batch in enumerate(data_loader):
                 # x of size (batch, ) bandits or (batch, assortment_size) for assortment optimization
                 # y of size (batch, ), floats
                 # a of size (batch, index_size = m)
-                # import pdb;
-                # pdb.set_trace()
                 x, y, a = batch
                 if batch_ix > 0: #TODO remember this
                     break
@@ -74,12 +66,7 @@ class Hypermodel(object):
                 if steps_done >= num_steps:
                     return total_loss / num_steps
 
-# TODO devices
-# g takes Model as argument
-# Model's got to be a nn.Module implementing:
-# init_parameters()
-# sample_z()
-# sample_prior
+
 class HypermodelG(object):
     def __init__(self, model, *args, **kwargs):
         self.model = model
@@ -92,7 +79,7 @@ class HypermodelG(object):
 
 
 class LinearModuleBandits(nn.Module):
-    def __init__(self, k_bandits, model_dim, prior_std):
+    def __init__(self, k_bandits, model_dim, prior_std=1.5):
         super(LinearModuleBandits, self).__init__()
         self.k = k_bandits
         self.m = model_dim
@@ -124,7 +111,7 @@ class LinearModuleBandits(nn.Module):
         return self.D * (self.B * z).sum(-1)
 
 
-class LinearModuleAssortmentOpt(nn.Module): # TODO define the prior function correctly
+class LinearModuleAssortmentOpt(nn.Module): 
     def __init__(self, model_size, index_size):
         super(LinearModuleAssortmentOpt, self).__init__()
         self.k = model_size
@@ -156,23 +143,21 @@ class LinearModuleAssortmentOpt(nn.Module): # TODO define the prior function cor
         return self.D * (self.B * z).sum(-1)
 
 
-class NeuralModuleAssortmentOpt(nn.Module): # TODO define the prior function correctly
+class NeuralModuleAssortmentOpt(nn.Module):
     def __init__(self, model_size, index_size):
         super(NeuralModuleAssortmentOpt, self).__init__()
         self.k = model_size
         self.m = index_size
         self.in_layer = nn.Linear(in_features=index_size * model_size, out_features=model_size)
         self.activation = nn.ReLU()
+        self.mid_layer = nn.Linear(in_features=model_size, out_features=model_size)
+        self.activation2 = nn.ReLU()
         self.out_layer = nn.Linear(in_features=model_size, out_features=model_size)
         self.D = torch.randn(self.k) * 1.5 # 1.5 gives something ~close to an uniform[0, 1]
         self.B = torch.from_numpy(generate_hypersphere(dim=self.m, n_samples=self.k, norm=2)).unsqueeze(0)
     
     def init_parameters(self):
-        # mu_sampled = torch.randn(self.k) * 0.05
-        # c_sampled = torch.randn(self.k, self.k * self.m) * 0.05
-        # import pdb;
-        # pdb.set_trace()
-        modules = [self.in_layer, self.out_layer]
+        modules = [self.in_layer, self.mid_layer, self.out_layer]
         for layer in modules:
             layer.weight.data = 0.05 * nn.init.xavier_uniform_(layer.weight.data, gain=nn.init.calculate_gain('relu'))
             layer.bias.data.fill_(0.)
@@ -185,6 +170,8 @@ class NeuralModuleAssortmentOpt(nn.Module): # TODO define the prior function cor
         z = z.view(z.size(0), -1).contiguous()
         z = self.in_layer(z)
         z = self.activation(z)
+        z = self.mid_layer(z)
+        z = self.activation2(z)
         z = self.out_layer(z)
         return z # torch.sigmoid(self.layer(z)) # TODO remember the need for a sigmoid in the ids agent
     
@@ -193,3 +180,5 @@ class NeuralModuleAssortmentOpt(nn.Module): # TODO define the prior function cor
     
     def prior(self, z): #TODO unclear if gonna work
         return self.D * (self.B * z).sum(-1)
+
+# TODO devices
