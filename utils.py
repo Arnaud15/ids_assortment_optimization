@@ -1,14 +1,8 @@
 import os
 import numpy as np
-import numba
 import matplotlib.pyplot as plt
 from collections import Counter
-from scipy.optimize import minimize_scalar
-from functools import partial
 import pickle
-
-DISCRETIZATION_IDS = 25
-RHO_VALUES = np.linspace(start=0., stop=1.0, num=DISCRETIZATION_IDS)
 
 OUTPUTS_FOLDER = 'outputs'
 if not os.path.isdir(OUTPUTS_FOLDER):
@@ -67,35 +61,7 @@ def possible_actions(n_items, assortment_size):
         return [[i] for i in range(n_items)]
     else:
         prev_lists = possible_actions(n_items, assortment_size - 1)
-        return [tuple(prev_list + [i]) for prev_list in prev_lists for i in range(prev_list[-1] + 1, n_items)]
-
-
-def information_ratio_(rho, d1, d2, g1, g2):
-    return (d1 * rho + (1 - rho) * d2) ** 2 / (g1 * rho + (1 - rho) * g2)
-
-
-def optimized_ratio(d1, d2, g1, g2, discrete=True):
-    func = partial(information_ratio_, d1=d1, d2=d2, g1=g1, g2=g2)
-    possible_values = [(rho, func(rho=rho)) for rho in RHO_VALUES]
-    min_ = np.inf
-    rho_min = -1
-    for (rho_, val) in possible_values:
-        if val < min_:
-            rho_min = rho_
-            min_ = val
-    return min_, rho_min
-    # solution = minimize_scalar(fun=func, bounds=(0., 1.), method='bounded')
-    # return solution.fun, solution.x
-
-
-def expected_reward(preferences, action):
-    """
-    :param preferences: shape (m, n) sampled model parameters
-    :param action: indexes in [0, ..., n-1]
-    :return:
-    """
-    filtered_item_weights = preferences[:, action].sum(1)
-    return (filtered_item_weights / (1 + filtered_item_weights)).mean()
+        return [prev_list + [i] for prev_list in prev_lists for i in range(prev_list[-1] + 1, n_items)]# TODO fix with greedy
 
 
 def print_actions_posteriors(agent, past_observations):
@@ -195,7 +161,7 @@ if __name__ == "__main__":
     parser.add_argument("--agents", type=str, required=True, help="select agents appearing on the plot", nargs='+')
     parser.add_argument("-n", type=str, default='5', help="number of items in experiments plotted")
     parser.add_argument("-k", type=str, default='2', help="size of the assortments in experiments plotted")
-    parser.add_argument("--horizon", type=str, default='100', help="horizon in experiments plotted")
+    parser.add_argument("--horizon", type=str, default='400', help="horizon in experiments plotted")
     parser.add_argument("--regret_plot", type=int, default=1, help="whether or not to plot regret curve of experiments")
     parser.add_argument("--action_plot", type=int, default=0, help="whether or not to plot action selection analysis")
     args = parser.parse_args()

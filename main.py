@@ -10,10 +10,10 @@ from argparse import ArgumentParser
 
 parser = ArgumentParser()
 parser.add_argument("--agent", type=str, required=True, help="choice of ts, ids, rd, ets, eids")
-parser.add_argument("-n", type=int, default=5, help="number of items available")
+parser.add_argument("-n", type=int, default=8, help="number of items available")
 parser.add_argument("-k", type=int, default=2, help="size of the assortments")
-parser.add_argument("--horizon", type=int, default=100, help="number of random simulations to carry out with agent")
-parser.add_argument("--nruns", type=int, default=10, help="number of random simulations to carry out with agent")
+parser.add_argument("--horizon", type=int, default=450, help="number of random simulations to carry out with agent")
+parser.add_argument("--nruns", type=int, default=1, help="number of random simulations to carry out with agent")
 parser.add_argument("--fixed_preferences", type=int, default=0,
                     help="if you want episodes running with pre-defined preferences")
 parser.add_argument("--verbose", type=int, default=1, help="print intermediate info during episodes or not")
@@ -113,40 +113,40 @@ if __name__ == "__main__":
     regularizations = [0.1, 0.25, 0.5, 1., 2.]
     best_gap = np.inf 
     best_parameters = {}
-    for given_lr in lrs:
-        for given_dim in model_dims:
-            for given_reg in regularizations:
-                args.lr = given_lr
-                args.model_input_dim = given_dim
-                args.reg_weight = given_reg
-                agent = agent_class(k=args.k,
-                    n=args.n,
-                    correlated_sampling=correlated_sampling,
-                    horizon=args.horizon,
-                    n_samples=args.ids_samples,
-                    info_type=args.ids_type,
-                    params=args)
-                gap_params = 0.
-                ntest = 1
-                for _ in range(ntest):
-                    run_preferences = np.concatenate([uniform.rvs(size=args.n),
-                                                    np.array([1.])])
-                    env = AssortmentEnvironment(n=args.n, v=run_preferences)
-                    obs_run, rewards_run = run_episode(envnmt=env, actor=agent, n_steps=args.horizon)
-                    gap_params += np.mean((run_preferences[:-1] - agent.sample_from_posterior(1000).mean(0)) ** 2)
-                gap_params = gap_params / ntest
-                if gap_params < best_gap:
-                    best_gap = gap_params
-                    best_parameters = {'lr':given_lr, 'dim':given_dim, 'regularization':given_reg}
-                    print(f"new best parameters: {best_parameters}")
+    # for given_lr in lrs:
+    #     for given_dim in model_dims:
+    #         for given_reg in regularizations:
+    #             args.lr = given_lr
+    #             args.model_input_dim = given_dim
+    #             args.reg_weight = given_reg
+    #             agent = agent_class(k=args.k,
+    #                 n=args.n,
+    #                 correlated_sampling=correlated_sampling,
+    #                 horizon=args.horizon,
+    #                 n_samples=args.ids_samples,
+    #                 info_type=args.ids_type,
+    #                 params=args)
+    #             gap_params = 0.
+    #             ntest = 1
+    #             for _ in range(ntest):
+    #                 run_preferences = np.concatenate([uniform.rvs(size=args.n),
+    #                                                 np.array([1.])])
+    #                 env = AssortmentEnvironment(n=args.n, v=run_preferences)
+    #                 obs_run, rewards_run = run_episode(envnmt=env, actor=agent, n_steps=args.horizon)
+    #                 gap_params += np.mean((run_preferences[:-1] - agent.sample_from_posterior(1000).mean(0)) ** 2)
+    #             gap_params = gap_params / ntest
+    #             if gap_params < best_gap:
+    #                 best_gap = gap_params
+    #                 best_parameters = {'lr':given_lr, 'dim':given_dim, 'regularization':given_reg}
+    #                 print(f"new best parameters: {best_parameters}")
                     
-    import pickle 
-    with open('./outputs/hyper_params.pickle', 'wb') as handle:
-        pickle.dump(best_parameters, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        print('best parameters saved')
-    with open('./outputs/hyper_params.pickle', 'rb') as handle:
-        params = pickle.load(handle)
-        print(f'best parameters loaded: {params}')
+    # import pickle 
+    # with open('./outputs/hyper_params.pickle', 'wb') as handle:
+    #     pickle.dump(best_parameters, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    #     print('best parameters saved')
+    # with open('./outputs/hyper_params.pickle', 'rb') as handle:
+    #     params = pickle.load(handle)
+    #     print(f'best parameters loaded: {params}')
                     
 
     # Actual experiments with logging
@@ -154,8 +154,12 @@ if __name__ == "__main__":
     for _ in range(args.nruns):
         run_preferences = FIXED_PREFERENCES
         if not args.fixed_preferences:
-            run_preferences = np.concatenate([uniform.rvs(size=args.n),
-                                              np.array([1.])])
+            selected_item = np.random.randint(args.n)
+            run_preferences = np.zeros(args.n+1)
+            run_preferences[selected_item] = 1.
+            run_preferences[args.n] = 1.
+            # run_preferences = np.concatenate([uniform.rvs(size=args.n),
+            #                                   np.array([1.])])
         env = AssortmentEnvironment(n=args.n, v=run_preferences)
         top_preferences = np.sort(run_preferences)[-(args.k + 1):]
         top_preferences = top_preferences / top_preferences.sum()
