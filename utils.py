@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import numba
 import matplotlib.pyplot as plt
 from collections import Counter
 from scipy.optimize import minimize_scalar
@@ -18,7 +19,9 @@ AGENT_IDS = {'ts': "Thompson Sampling",
              'ids': "Information Directed Sampling",
              'ets': "Epoch based Thompson Sampling",
              'etscs': "Epoch based TS with Correlated Sampling",
-             "eids": "Epoch based IDS"}
+             'hts': 'Hypermodel TS',
+             "eids": "Epoch based IDS",
+             'hids': "Hypermodel IDS"}
 
 def save_experiment_data(exp_id, exp_data):
     """
@@ -50,15 +53,12 @@ def load_experiment_data(name):
 
 
 def act_optimally(belief, top_k):
+    noise_breaking_ties = np.random.randn(*belief.shape) * 1e-5
+    belief += noise_breaking_ties
     if len(belief.shape) <= 1:
-        rd_pick = np.random.choice(np.arange(belief.shape[0]), size=top_k, replace=False)
-        std = np.std(belief)
-        return np.sort(np.argpartition(belief, -top_k)[-top_k:]) if std > 1e-4 else rd_pick
+        return np.sort(np.argpartition(belief, -top_k)[-top_k:])
     else:
-        rd_pick = np.array(
-            [np.random.choice(np.arange(belief.shape[1]), size=top_k, replace=False) for _ in range(belief.shape[0])])
-        std = np.std(belief, axis=1).mean()
-        return np.sort(np.argpartition(belief, -top_k, axis=1)[:, -top_k:], axis=1) if std > 1e-4 else rd_pick
+        return np.sort(np.argpartition(belief, -top_k, axis=1)[:, -top_k:], axis=1)
 
 
 def possible_actions(n_items, assortment_size):
@@ -76,18 +76,16 @@ def information_ratio_(rho, d1, d2, g1, g2):
 
 def optimized_ratio(d1, d2, g1, g2, discrete=True):
     func = partial(information_ratio_, d1=d1, d2=d2, g1=g1, g2=g2)
-    if discrete:
-        possible_values = [(rho, func(rho=rho)) for rho in RHO_VALUES]
-        min_ = np.inf
-        rho_min = -1
-        for (rho_, val) in possible_values:
-            if val < min_:
-                rho_min = rho_
-                min_ = val
-        return min_, rho_min
-    else:
-        solution = minimize_scalar(fun=func, bounds=(0., 1.), method='bounded')
-        return solution.fun, solution.x
+    possible_values = [(rho, func(rho=rho)) for rho in RHO_VALUES]
+    min_ = np.inf
+    rho_min = -1
+    for (rho_, val) in possible_values:
+        if val < min_:
+            rho_min = rho_
+            min_ = val
+    return min_, rho_min
+    # solution = minimize_scalar(fun=func, bounds=(0., 1.), method='bounded')
+    # return solution.fun, solution.x
 
 
 def expected_reward(preferences, action):
@@ -98,6 +96,15 @@ def expected_reward(preferences, action):
     """
     filtered_item_weights = preferences[:, action].sum(1)
     return (filtered_item_weights / (1 + filtered_item_weights)).mean()
+
+
+def print_actions_posteriors(agent, past_observations):
+    data_test = agent.sample_from_posterior(1000)
+    print(f"agent posterior sample: {data_test.mean(0)}, {data_test.std(0)}")
+    item_proposals = []
+    for assortment, _ in past_observations:
+        item_proposals += list(assortment)
+    print(f"agent actions taken: {sorted([(key, i) for (key, i) in Counter(item_proposals).items()], key=lambda x:x[0])}")
 
 
 def print_regret(exp_names):
@@ -188,7 +195,7 @@ if __name__ == "__main__":
     parser.add_argument("--agents", type=str, required=True, help="select agents appearing on the plot", nargs='+')
     parser.add_argument("-n", type=str, default='5', help="number of items in experiments plotted")
     parser.add_argument("-k", type=str, default='2', help="size of the assortments in experiments plotted")
-    parser.add_argument("--horizon", type=str, default='500', help="horizon in experiments plotted")
+    parser.add_argument("--horizon", type=str, default='100', help="horizon in experiments plotted")
     parser.add_argument("--regret_plot", type=int, default=1, help="whether or not to plot regret curve of experiments")
     parser.add_argument("--action_plot", type=int, default=0, help="whether or not to plot action selection analysis")
     args = parser.parse_args()

@@ -80,15 +80,15 @@ class EpochSamplingAgent(Agent, abc.ABC):
             return np.array(
                 [(1 / beta.rvs(a=a_, b=b_, size=n_samples)) - 1 for (a_, b_) in self.posterior_parameters]).T
         else:
-            gaussian_means = np.expand_dims([b_ / a_ for (a_, b_) in self.posterior_parameters], 0)
+            gaussian_means = np.expand_dims([b_ / (a_-1) for (a_, b_) in self.posterior_parameters], 0)
             gaussian_stds = np.expand_dims(
-                [np.sqrt(((b_ / a_) * ((b_ / a_) + 1)) / a_) for
+                [np.sqrt(((b_ / (a_-1)) * ((b_ / (a_-1)) + 1)) / (a_-2)) for
                  (a_, b_) in self.posterior_parameters], 0)
+            # print(gaussian_means, gaussian_stds)
+#             import ipdb;
+#             ipdb.set_trace()
             theta_sampled = np.random.randn(n_samples, 1)
             sample = gaussian_means + theta_sampled * gaussian_stds
-            noise_breaking_ties = np.random.randn(*sample.shape) * 1e-3
-            sample += noise_breaking_ties
-            sample = np.clip(sample, a_min=0., a_max=1.0)
             # print(f"sampled posterior parameters are: {sample}")
             return sample
 
@@ -96,7 +96,7 @@ class EpochSamplingAgent(Agent, abc.ABC):
         self.epoch_ended = True
         self.current_action = self.n_items
         self.epoch_picks = defaultdict(int)
-        self.posterior_parameters = [(1, 1) for _ in range(self.n_items)]
+        self.posterior_parameters = [(3, 1) for _ in range(self.n_items)]
 
     def update(self, item_selected):
         reward = self.perceive_reward(item_selected)

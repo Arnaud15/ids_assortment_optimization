@@ -9,7 +9,7 @@ class EpochSamplingIDS(EpochSamplingAgent):
         self.ids_sampler = InformationDirectedSampler(assortment_size=k, info_type=info_type, n_samples=n_samples)
 
     def proposal(self):
-        self.prior_belief = self.sample_from_posterior(self.n_samples)
+        self.prior_belief = self.sample_from_posterior(self.ids_sampler.n_samples)
         # print(f"belief sampled is: {1000 * self.prior_belief.astype(int)}")
         # print(f"optimal actions are: {self.optimal_actions}")
         self.ids_sampler.update_belief(self.prior_belief)

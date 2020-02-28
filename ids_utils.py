@@ -1,3 +1,4 @@
+import numba
 import numpy as np
 from random import shuffle
 from collections import defaultdict
@@ -56,19 +57,19 @@ def ids_action_selection(n, k, delta_, g_):
     actions_set = possible_actions(n_items=n, assortment_size=k)
     shuffle(actions_set)
     min_information_ratio = np.inf
-    rho_pick = None
-    deltas = [None, None]
-    gains = [None, None]
+    # rho_pick = 0.5
+    # deltas = [None, None]
+    # gains = [None, None]
     ids_action = actions_set[0]
-    total_no_info_gain = 0
-    total_no_delta = 0
+    # total_no_info_gain = 0
+    # total_no_delta = 0
     for action1 in actions_set:
         g_a1 = g_(action1)
         delta_1 = delta_(action1)
-        if not g_a1:
-            total_no_info_gain += 1
-        if not delta_1:
-            total_no_delta += 1
+        # if not g_a1:
+        #     total_no_info_gain += 1
+        # if not delta_1:
+        #     total_no_delta += 1
         for action2 in actions_set:
             g_a2 = g_(action2)
             delta_2 = delta_(action2)
@@ -89,12 +90,12 @@ def ids_action_selection(n, k, delta_, g_):
 
                 action_picked = action1 if np.random.rand() <= rho else action2
             if value < min_information_ratio:
-                deltas = delta_1, delta_2
-                gains = g_a1, g_a2
+                # deltas = delta_1, delta_2
+                # gains = g_a1, g_a2
                 min_information_ratio = value
                 ids_action = action_picked
-                rho_pick = rho
-
+                # rho_pick = rho
+    return ids_action
     # print(f"min information ratio obtained is {min_information_ratio:.4f}")
     # print(f"with deltas: {[f'{delt:.5f}' for delt in deltas]}")
     # print(f"and information gains: {[f'{gain:.5f}' for gain in gains]}")
@@ -107,7 +108,7 @@ def ids_action_selection(n, k, delta_, g_):
     # if total_no_delta:
     #     import ipdb
     #     ipdb.set_trace()
-    return ids_action
+    # return ids_action
 
 
 class InformationDirectedSampler:
@@ -123,6 +124,9 @@ class InformationDirectedSampler:
     def init_sampler(self):
         self.posterior_belief = np.random.rand(self.n_samples, self.assortment_size)
         self.optimal_actions = None
+        self.optimal_actions = None
+        self.thetas_nb = None
+        self.counts_nb = None
         self.g_ = None
         self.r_star = 0.
         self.delta_ = None
@@ -146,22 +150,29 @@ class InformationDirectedSampler:
 
         self.optimal_actions = {action: (len(theta_idxs) / self.n_samples, theta_idxs) for
                                 action, theta_idxs in optimal_actions_information.items()}
+        self.opt_actions_nb = np.array([list(key) for key in optimal_actions_information.keys()])
+        self.counts_nb = np.array([len(val) for val in optimal_actions_information.values()])
+        self.thetas_nb = []
+        for val in optimal_actions_information.values():
+            self.thetas_nb += val
+        self.thetas_nb = np.array(self.thetas_nb)
+
 
     def compute_delta(self):
         self.update_r_star()
-        self.delta_ = partial(delta_full,
-                              sampled_preferences=self.posterior_belief,
-                              r_star=self.r_star)
+        self.delta_ = delta_full
+                            #   sampled_preferences=self.posterior_belief,
+                            #   r_star=self.r_star)
 
     def compute_g(self):
         if self.info_type == "IDS":
-            self.g_ = partial(g_full,
-                            sampled_preferences=self.posterior_belief,
-                            opt_actions=self.optimal_actions)
+            self.g_ = g_full
+                            # sampled_preferences=self.posterior_belief,
+                            # opt_actions=self.optimal_actions)
         elif self.info_type =="VIDS":
-            self.g_ = partial(v_full,
-                            sampled_preferences=self.posterior_belief,
-                            opt_actions=self.optimal_actions)
+            self.g_ = v_full
+                            # sampled_preferences=self.posterior_belief,
+                            # opt_actions=self.optimal_actions)
         else:
             raise ValueError
 
