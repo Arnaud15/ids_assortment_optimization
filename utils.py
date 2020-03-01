@@ -15,6 +15,7 @@ AGENT_IDS = {'ts': "Thompson Sampling",
              'etscs': "Epoch based TS with Correlated Sampling",
              'hts': 'Hypermodel TS',
              "eids": "Epoch based IDS",
+             "evids": "Epoch based VIDS",
              'hids': "Hypermodel IDS"}
 
 def save_experiment_data(exp_id, exp_data):
@@ -73,14 +74,11 @@ def print_actions_posteriors(agent, past_observations):
     print(f"agent actions taken: {sorted([(key, i) for (key, i) in Counter(item_proposals).items()], key=lambda x:x[0])}")
 
 
-def print_regret(exp_names):
+def print_regret(exp_names, exp_base_name):
     """
     :param exp_names: list of names for experiment data saved in the outputs folder
     :return: regret plots are saved in OUTPUTS_FOLDER
     """
-    first_exp_name = exp_names[0]
-    exp_base_name = first_exp_name.split('_')[2:] if 'ids' in first_exp_name else first_exp_name.split('_')[2:]
-    exp_base_name = '_'.join(exp_base_name)
     print(f"Regret plot for experiments of type: {exp_base_name}")
 
     plt.figure()
@@ -95,7 +93,7 @@ def print_regret(exp_names):
 
         agent_name = AGENT_IDS[name.split('_')[0]]
         print(agent_name, n_runs, n_steps)
-        curve_name = f"Regret curve for {agent_name} agent." if 'ids' not in name else f"Regret curve for {agent_name} agent with {name.split('_')[1]} samples"
+        curve_name = f"{agent_name} agent." if 'ids' not in name else f"{agent_name} agent with {name.split('_')[1]} samples and {name.split('_')[2]} action selection"
         plt.plot(np.arange(n_steps), cumulative_regret, label=curve_name)
 
     plt.xlabel('Time steps')
@@ -142,7 +140,7 @@ def print_actions(exp_names):
     plt.close()
 
 def generate_hypersphere(dim, n_samples, norm=1):
-    if norm==1: # TODO ask question about that
+    if norm==1:
         samples = np.random.rand(n_samples, dim)
         samples = samples / np.expand_dims(np.abs(samples).sum(1), 1)
         return samples
@@ -160,14 +158,12 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--agents", type=str, required=True, help="select agents appearing on the plot", nargs='+')
     parser.add_argument("-n", type=str, default='5', help="number of items in experiments plotted")
-    parser.add_argument("-k", type=str, default='2', help="size of the assortments in experiments plotted")
-    parser.add_argument("--horizon", type=str, default='400', help="horizon in experiments plotted")
+    parser.add_argument("-k", type=str, default='3', help="size of the assortments in experiments plotted")
+    parser.add_argument("--horizon", type=str, default='500', help="horizon in experiments plotted")
     parser.add_argument("--regret_plot", type=int, default=1, help="whether or not to plot regret curve of experiments")
     parser.add_argument("--action_plot", type=int, default=0, help="whether or not to plot action selection analysis")
     args = parser.parse_args()
     experiment_base_name = '_'.join([args.n, args.k, args.horizon])
     experiments_to_plot = [agent_key + '_' + experiment_base_name for agent_key in args.agents]
     if args.regret_plot:
-        print_regret(experiments_to_plot)
-    if args.action_plot:
-        print_actions(experiments_to_plot)
+        print_regret(experiments_to_plot, exp_base_name)

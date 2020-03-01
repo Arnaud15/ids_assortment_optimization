@@ -2,7 +2,7 @@ import numpy as np
 import abc
 from scipy.stats import beta
 from collections import defaultdict
-from hypermodels import *
+from hypermodels import NeuralModuleAssortmentOpt, LinearModuleAssortmentOpt, Hypermodel, HypermodelG
 from utils import generate_hypersphere
 from torch.utils.data import DataLoader
 import torch
@@ -80,9 +80,9 @@ class EpochSamplingAgent(Agent, abc.ABC):
             return np.array(
                 [(1 / beta.rvs(a=a_, b=b_, size=n_samples)) - 1 for (a_, b_) in self.posterior_parameters]).T
         else:
-            gaussian_means = np.expand_dims([b_ / (a_-1) for (a_, b_) in self.posterior_parameters], 0)
+            gaussian_means = np.expand_dims([b_ / a_ for (a_, b_) in self.posterior_parameters], 0)
             gaussian_stds = np.expand_dims(
-                [np.sqrt(((b_ / (a_-1)) * ((b_ / (a_-1)) + 1)) / (a_-2)) for
+                [np.sqrt((b_ / a_) * ((b_ / a_) + 1) / a_) for
                  (a_, b_) in self.posterior_parameters], 0)
             # print(gaussian_means, gaussian_stds)
 #             import ipdb;
@@ -96,7 +96,7 @@ class EpochSamplingAgent(Agent, abc.ABC):
         self.epoch_ended = True
         self.current_action = self.n_items
         self.epoch_picks = defaultdict(int)
-        self.posterior_parameters = [(3, 1) for _ in range(self.n_items)]
+        self.posterior_parameters = [(1, 1) for _ in range(self.n_items)]
 
     def update(self, item_selected):
         reward = self.perceive_reward(item_selected)
