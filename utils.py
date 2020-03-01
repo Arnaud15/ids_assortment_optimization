@@ -157,13 +157,13 @@ if __name__ == "__main__":
 
     parser = ArgumentParser()
     parser.add_argument("--agents", type=str, required=True, help="select agents appearing on the plot", nargs='+')
-    parser.add_argument("-n", type=str, default='5', help="number of items in experiments plotted")
+    parser.add_argument("-n", type=str, default='50', help="number of items in experiments plotted")
     parser.add_argument("-k", type=str, default='3', help="size of the assortments in experiments plotted")
-    parser.add_argument("--horizon", type=str, default='500', help="horizon in experiments plotted")
+    parser.add_argument("--horizon", type=str, default='100', help="horizon in experiments plotted")
     parser.add_argument("--regret_plot", type=int, default=1, help="whether or not to plot regret curve of experiments")
     parser.add_argument("--action_plot", type=int, default=0, help="whether or not to plot action selection analysis")
     args = parser.parse_args()
     experiment_base_name = '_'.join([args.n, args.k, args.horizon])
     experiments_to_plot = [agent_key + '_' + experiment_base_name for agent_key in args.agents]
     if args.regret_plot:
-        print_regret(experiments_to_plot, exp_base_name)
+        print_regret(experiments_to_plot, experiment_base_name)
