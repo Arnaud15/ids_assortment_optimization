@@ -2,38 +2,16 @@ from env import AssortmentEnvironment
 from base_agents import RandomAgent
 from ts_agents import EpochSamplingTS, HypermodelTS
 from ids_agents import EpochSamplingIDS, HypermodelIDS
-from utils import save_experiment_data, print_actions_posteriors
+from utils import save_experiment_data, print_actions_posteriors, get_prior
 from scipy.stats import uniform
 import numpy as np
 import pickle 
 from tqdm import tqdm
-from argparse import ArgumentParser
+from args import get_experiment_args
 
-parser = ArgumentParser()
-parser.add_argument("--agent", type=str, required=True, help="choice of ts, ids, rd, ets, eids")
-parser.add_argument("-n", type=int, default=50, help="number of items available")
-parser.add_argument("-k", type=int, default=3, help="size of the assortments")
-parser.add_argument("--horizon", type=int, default=100, help="number of random simulations to carry out with agent")
-parser.add_argument("--nruns", type=int, default=50, help="number of random simulations to carry out with agent")
-parser.add_argument("--limited_preferences", type=int, default=0,
-                    help="run in the setting I had mentioned")
-parser.add_argument("--verbose", type=int, default=0, help="print intermediate info during episodes or not")
-parser.add_argument("--ids_action", type=str, default='greedy', help="action selection: exact IDS, approximate (linear in O(A)), greedy")
-parser.add_argument("--greedy_scaler", type=float, default=1.0, help="scaling factor for greedy action selection")
-parser.add_argument("--ids_samples", type=int, default=100,
-                    help="if you want episodes running with pre-defined preferences")
-parser.add_argument("--reg_weight", type=float, default=1.)
-parser.add_argument("--training_sigmaobs", type=float, default=0.2)
-parser.add_argument("--lr", type=float, default=1e-1)# 1e-3 and reg 0.1 for mlp
-parser.add_argument("--model_input_dim", type=int, default=10)
-parser.add_argument("--nsteps", type=int, default=25)
-parser.add_argument("--printinterval", type=int, default=0)
-parser.add_argument("--batch_size", type=int, default=1024)
-parser.add_argument("--nzsamples", type=int, default=32)
 
+# LIST OF SUPPORTED AGENT KEYS WITH THE CORRESPONDING CLASSES
 AGENTS = {"rd": RandomAgent,
-        #   "ts": ThompsonSamplingAgent,
-        #   "ids": InformationDirectedSamplingAgent,
           "ets": EpochSamplingTS,
           "eids": EpochSamplingIDS,
           "evids":EpochSamplingIDS,
@@ -47,21 +25,28 @@ def run_episode(envnmt, actor, n_steps, verbose=False):
     :param actor: instance from the Agent class
     :param n_steps: horizon of the run in the environment
     :return: (observations history = list of (assortment one-hot array of size N+1, 0<=index<=N of item picked),
-    rewards = historical rewards)
+    rewards = 1D numpy array of size (horizon,) with entries = expected_reward from action taken given env parameters
     """
-    actor.reset()  # Resets the internal state of the agent at the start of simulations (prior beliefs, etc...)
+    # Initialization of observations and agent
+    actor.reset()  
     rewards = np.zeros(n_steps)
     obs = [0] * n_steps
     iterator = tqdm(range(n_steps)) if not verbose else range(n_steps)
     for ix in iterator:
+        # act / step / update
         assortment = actor.act()
         item_selected = envnmt.step(assortment)
+        actor.update(item_selected) 
+        # Store expected reward, observation
         obs[ix] = (assortment, item_selected)
-        reward = actor.update(item_selected)  # agent observes item selected, perceive reward and updates its beliefs
-        if verbose and ((ix > n_steps - 2) or ((ix + 1) % 25 == 0) or (not ix)):
+        unnormalized_pick_proba = envnmt.preferences[assortment].sum()
+        rewards[ix] = unnormalized_pick_proba / (1. + unnormalized_pick_proba)
+        # Print current posterior belief of the agent if asked
+        if verbose and ((ix > n_steps - 2) or ((ix + 1) % 50 == 0) or (ix == 0)):
             print_actions_posteriors(agent=actor, past_observations=obs[:ix+1])
-        rewards[ix] = reward
     prefs_str = [f'{run_preference:.2f}' for run_preference in envnmt.preferences]
+
+    # Print environment model parameters if asked
     if verbose:
         print(f'Initial preferences were :{prefs_str}')
         print(f'Best action was: {env.preferences.argsort()[-(args.k + 1):][::-1][1:]}')
@@ -69,6 +54,11 @@ def run_episode(envnmt, actor, n_steps, verbose=False):
 
 
 def summarize_run(observations):
+    """
+    param: observations = [obs=(k-sparse assortment given, index of item selected) for obs in observations]
+    return: {assortments: 1D array of size K with how many times each item is proposed,
+             picks: 1D array with how many times each item if picked}
+    """
     run_assortments = sum([assortment for assortment, item_picked in observations])
     run_picks = {item_ix: 0 for item_ix in range(args.n + 1)}
     for assortment, item_picked in observations:
@@ -76,11 +66,10 @@ def summarize_run(observations):
     return {"assortments": run_assortments,
             "picks": run_picks}
 
-
+# TODO refactor that when we come back to work with hypermodels
 def hypermodels_search(args, step1, step2):
     # Hyperparameters search
     # step 1 is below, step 2 is too look into the best sigma_obs 
-    # best params = 0.1 / 10 / 1. for linear model
     # best params = ??? for neural model.
     # IDEA: encode how many times items have occured together in the model?
     print("Hyperparameters search begins...")
@@ -156,81 +145,83 @@ def hypermodels_search(args, step1, step2):
 
 
 def scaler_search(args, agent_class, info_type):
-    scales = [0.05 * i for i in range(1, 11)]
+    """
+    args = Namespace object with the parameters for the experiment
+    agent_class = class for the IDS agent for which we find the best epsilon parameter for greedy IDS action selection
+    """
+    print("Scale search begins:")
+    # Grid search over the following possible values
+    scales = np.linspace(start=0., stop=0.1, num=10) 
     best_rewards = 0.
     for scale in scales:
+        # Instantiate the agent
         agent = agent_class(k=args.k,
                             n=args.n,
                             correlated_sampling=False,
                             horizon=args.horizon,
                             n_samples=args.ids_samples,
                             info_type=info_type,
-                            action_type=args.ids_action,
+                            action_type=args.ids_action_selection,
                             scaling_factor=scale,
                             params=args)
+        # Examine the sum of rewards accumulated on average over args.best_scaler_n runs
         sum_of_rewards = 0.
-        for _ in range(args.nruns):
-            run_preferences = np.concatenate([uniform.rvs(size=args.n),
-                                            np.array([1.])])
+        for _ in range(args.best_scaler_n):
+            run_preferences = get_prior(n_items=args.n, prior_type=args.prior) 
             env = AssortmentEnvironment(n=args.n, v=run_preferences)
-            obs_run, rewards_run = run_episode(envnmt=env, actor=agent, n_steps=args.horizon)
+            obs_run, rewards_run = run_episode(envnmt=env, actor=agent, n_steps=args.best_scaler_h)
             sum_of_rewards += rewards_run.sum()
-        sum_of_rewards = sum_of_rewards / args.nruns
+        sum_of_rewards = sum_of_rewards / args.best_scaler_n
         if sum_of_rewards > best_rewards:
             best_rewards = sum_of_rewards
             best_scale = scale
-            print(f"New best scaling factor:{scale} with rewards: {sum_of_rewards:.2f} over horizon: {args.horizon}") 
+            print(f"New best scaling factor:{scale} with rewards: {sum_of_rewards:.2f} over horizon: {args.best_scaler_h}") 
     return best_scale
             
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args = get_experiment_args(run_or_plot='run')
     print(f"Arguments are {args}")
-    print(f"Preferences are: {'limited' if args.limited_preferences else 'normal'}.")
+    print(f"Prior on environment parameters is: {args.prior}.")
 
-    # Hyperparameters search for Hypermodels
-    # hypermodels_search(args=args, step1=False, step2=True) 
-                    
-
-    # Experiment identifier in storage
+    # Agent name parsing to pick the right agent class and parameters 
     correlated_sampling = args.agent[-2:] == "cs"
     info_type = "VIDS" if 'vids' in args.agent else "IDS"
     agent_key = args.agent[:-2] if correlated_sampling else args.agent
 
-    agent_name = f"{args.agent}_{args.ids_samples}_{args.ids_action}" if 'ids' in args.agent else args.agent
+    # Agent name (string used in plots to identify it compared to other agents)
+    agent_name = f"{args.agent}_{args.ids_samples}_{args.ids_action_selection}" if 'ids' in args.agent else args.agent
     exp_keys = [agent_name,
                 args.n,
                 args.k,
-                args.horizon]
+                args.horizon,
+                args.name]
     exp_id = '_'.join([str(elt) for elt in exp_keys])
     print(f"Name of the agent is {exp_id}")
 
-    # Agent init
+    # Picking the correct agent class
     agent_class = AGENTS[agent_key]
 
     # Looking for the best approximation to true IDS action selection here
-    if agent_key == 'evids' and args.ids_action == 'greedy':
+    if agent_key == 'evids' and args.ids_action_selection == 'greedy' and args.find_best_scaler:
         args.greedy_scaler = scaler_search(args, agent_class, info_type)
 
+    # Instantiating the agent before experiments
     agent = agent_class(k=args.k,
                         n=args.n,
                         correlated_sampling=correlated_sampling,
                         horizon=args.horizon,
+                        limited_prefs=True if args.prior == "restricted" else False,
                         n_samples=args.ids_samples,
                         info_type=info_type,
-                        action_type=args.ids_action,
+                        action_type=args.ids_action_selection,
                         scaling_factor=args.greedy_scaler,
                         params=args)
-    # Actual experiments with logging
+
+    # Actual experiments with printing
     experiment_data = []
     for _ in range(args.nruns):
-        run_preferences = np.concatenate([uniform.rvs(size=args.n),
-                                            np.array([1.])])
-        if args.limited_preferences:
-            selected_item = np.random.randint(args.n)
-            run_preferences = np.zeros(args.n+1)
-            run_preferences[selected_item] = 1.
-            run_preferences[args.n] = 1.
+        run_preferences = get_prior(n_items=args.n, prior_type=args.prior) 
         env = AssortmentEnvironment(n=args.n, v=run_preferences)
         top_preferences = np.sort(run_preferences)[-(args.k + 1):]
         top_preferences = top_preferences / top_preferences.sum()

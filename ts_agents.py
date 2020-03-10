@@ -4,8 +4,10 @@ import numpy as np
 
 
 class EpochSamplingTS(EpochSamplingAgent):
-    def __init__(self, k, n, horizon, correlated_sampling, **kwargs):
-        EpochSamplingAgent.__init__(self, k, n, horizon=horizon, correlated_sampling=correlated_sampling)
+    def __init__(self, k, n, horizon, correlated_sampling, limited_prefs, **kwargs):
+        EpochSamplingAgent.__init__(self, k, n, horizon=horizon,
+                                                correlated_sampling=correlated_sampling,
+                                                limited_preferences=limited_prefs)
 
     def proposal(self):
         posterior_belief = self.sample_from_posterior(1)

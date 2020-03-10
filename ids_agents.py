@@ -5,13 +5,14 @@ from utils import possible_actions
 
 
 class EpochSamplingIDS(EpochSamplingAgent):
-    def __init__(self, k, n, correlated_sampling, n_samples, info_type, action_type, scaling_factor=0., **kwargs):
-        EpochSamplingAgent.__init__(self, k, n, horizon=None, correlated_sampling=False)
+    def __init__(self, k, n, correlated_sampling, limited_prefs, n_samples, info_type, action_type, scaling_factor=0., **kwargs):
+        EpochSamplingAgent.__init__(self, k, n, horizon=None, correlated_sampling=False, limited_preferences=limited_prefs)
         self.ids_sampler = InformationDirectedSampler(assortment_size=k, info_type=info_type, n_samples=n_samples)
         self.action_selection = action_type
         self.scaling_factor = scaling_factor
         print(f"Action selection mode is {self.action_selection}, with scaling factor: {self.scaling_factor}")
-        self.all_actions = np.array(possible_actions(self.n_items, self.assortment_size), dtype=int)
+        if self.action_selection != "greedy":
+            self.all_actions = np.array(possible_actions(self.n_items, self.assortment_size), dtype=int)
 
     def proposal(self):
         self.prior_belief = self.sample_from_posterior(self.ids_sampler.n_samples)

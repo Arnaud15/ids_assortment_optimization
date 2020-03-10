@@ -3,7 +3,7 @@ import abc
 from scipy.stats import beta
 from collections import defaultdict
 from hypermodels import NeuralModuleAssortmentOpt, LinearModuleAssortmentOpt, Hypermodel, HypermodelG
-from utils import generate_hypersphere
+from utils import generate_hypersphere, BAD_ITEM_CONSTANT, PAPER_EXPLORATION_BONUS, PAPER_UNDEFINED_PRIOR, TOP_ITEM_CONSTANT
 from torch.utils.data import DataLoader
 import torch
 
@@ -62,10 +62,12 @@ class RandomAgent(Agent):
 
 
 class EpochSamplingAgent(Agent, abc.ABC):
-    def __init__(self, k, n, horizon=None, correlated_sampling=False):
+    def __init__(self, k, n, horizon=None, correlated_sampling=False, limited_preferences=0):
         Agent.__init__(self, k, n)
         self.correlated_sampling = correlated_sampling
         self.T = horizon
+        self.first_item_best = True if limited_preferences else False
+        print(f"Agent believes that first item is the best: {self.first_item_best}")
         self.reset()
 
     def act(self):
@@ -76,42 +78,63 @@ class EpochSamplingAgent(Agent, abc.ABC):
         return action
 
     def sample_from_posterior(self, n_samples):
+        """
+        n_samples: how many samples to draw from the posterior
+        returns: 2D array of shape (n_samples, N_items) of posterior samples
+        """
         if not self.correlated_sampling:
+            # 1 / Beta(alpha, beta) - 1 prior from the Columbia paper
             return np.array(
                 [(1 / beta.rvs(a=a_, b=b_, size=n_samples)) - 1 for (a_, b_) in self.posterior_parameters]).T
         else:
-            gaussian_means = np.expand_dims([b_ / a_ for (a_, b_) in self.posterior_parameters], 0)
-            gaussian_stds = np.expand_dims(
-                [np.sqrt((b_ / a_) * ((b_ / a_) + 1) / a_) for
-                 (a_, b_) in self.posterior_parameters], 0)
-            # print(gaussian_means, gaussian_stds)
-#             import ipdb;
-#             ipdb.set_trace()
+            # Gaussian approximation of the Beta prior
+            if PAPER_EXPLORATION_BONUS:
+                gaussian_means = np.expand_dims([b_ / a_ for (a_, b_) in self.posterior_parameters], 0)
+                # Using their extra exploration bonus
+                gaussian_stds = np.expand_dims(
+                    [np.sqrt(50 * (b_ / a_) * ((b_ / a_) + 1) / a_) + 75 * np.sqrt(np.log(self.T * self.assortment_size))/a_  for
+                   (a_, b_) in self.posterior_parameters], 0)
+            else:
+                # Simply approximating the 1 / Beta(alpha, beta) - 1 by a normal distribution
+                if PAPER_UNDEFINED_PRIOR:
+                    # In the paper, they make a strong approximation as 1/beta - 1 has no well-defined mean / variance
+                    gaussian_stds = np.expand_dims(
+                        [np.sqrt(b_ / a_ * ((b_ / a_) + 1) / a_)  for
+                        (a_, b_) in self.posterior_parameters], 0)
+                    gaussian_means = np.expand_dims([b_ / a_ for (a_, b_) in self.posterior_parameters], 0)
+                else:
+                    # In our setting, we start with a (3, 3) prior for each item, having a well-defined mean / variance
+                    gaussian_stds = np.expand_dims(
+                        [np.sqrt((b_ / (a_-1)) * ((b_ / (a_-1)) + 1) / (a_-2))  for
+                        (a_, b_) in self.posterior_parameters], 0)
+                    gaussian_means = np.expand_dims([b_ / (a_-1) for (a_, b_) in self.posterior_parameters], 0)
             theta_sampled = np.random.randn(n_samples, 1)
             sample = gaussian_means + theta_sampled * gaussian_stds
-            # print(f"sampled posterior parameters are: {sample}")
             return sample
 
     def reset(self):
         self.epoch_ended = True
         self.current_action = self.n_items
         self.epoch_picks = defaultdict(int)
-        self.posterior_parameters = [(1, 1) for _ in range(self.n_items)]
+        if PAPER_EXPLORATION_BONUS or PAPER_UNDEFINED_PRIOR:
+            self.posterior_parameters = [(1, 1) for _ in range(self.n_items)]
+        else:
+            self.posterior_parameters = [(3, 3) for _ in range(self.n_items)]
+        if self.first_item_best:
+            # Correcting the prior when we know that a single item is "worth it"
+            self.posterior_parameters = [(a_, b_ * BAD_ITEM_CONSTANT) for (a_, b_) in self.posterior_parameters]
+            self.posterior_parameters[0] = (1e5, 1e5 * TOP_ITEM_CONSTANT)
+        # print(f"ES Agent initialized, with prior parameters: {self.posterior_parameters}")
+        # print(f"and exploration bonus: {PAPER_EXPLORATION_BONUS}, undefined prior: {PAPER_UNDEFINED_PRIOR}")
 
     def update(self, item_selected):
         reward = self.perceive_reward(item_selected)
         if item_selected == self.n_items:
             self.epoch_ended = True
-            # print(f"former posterior parameters where: {self.posterior_parameters}")
             n_is = [int(ix in self.current_action) for ix in range(self.n_items)]
-            # print("current action", self.current_action)
-            # print("nis", n_is)
             v_is = [self.epoch_picks[i] for i in range(self.n_items)]
-            # print("epoch picks", self.epoch_picks)
-            # print("vis", v_is)
             self.posterior_parameters = [(a + n_is[ix], b + v_is[ix]) for ix, (a, b) in
                                             enumerate(self.posterior_parameters)]
-            # print(f"Now they are {self.posterior_parameters}")
             self.epoch_picks = defaultdict(int)
         else:
             self.epoch_picks[item_selected] += 1

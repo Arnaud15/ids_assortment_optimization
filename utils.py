@@ -3,8 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from collections import Counter
 import pickle
+from args import get_experiment_args
 
+PAPER_EXPLORATION_BONUS = False # whether or not to employ the exploration bonus produced in the paper 
+PAPER_UNDEFINED_PRIOR = True # wheter or not to employ the paper's faulty gaussian approximations
+BAD_ITEM_CONSTANT = 0.5 # max possible preference for bad items
+TOP_ITEM_CONSTANT = 1.
 OUTPUTS_FOLDER = 'outputs'
+
 if not os.path.isdir(OUTPUTS_FOLDER):
     os.makedirs(OUTPUTS_FOLDER)
 
@@ -74,6 +80,34 @@ def print_actions_posteriors(agent, past_observations):
     print(f"agent actions taken: {sorted([(key, i) for (key, i) in Counter(item_proposals).items()], key=lambda x:x[0])}")
 
 
+def generate_hypersphere(dim, n_samples, norm=1):
+    if norm==1:
+        samples = np.random.rand(n_samples, dim)
+        samples = samples / np.expand_dims(np.abs(samples).sum(1), 1)
+        return samples
+    elif norm==2:
+        samples = np.random.randn(n_samples, dim)
+        samples = samples / np.expand_dims(np.sqrt((samples ** 2).sum(1)), 1)
+        return samples
+    else:
+        raise ValueError
+
+
+def get_prior(n_items, prior_type="uniform"):
+    if prior_type == "uniform":
+        prior = np.random.rand(n_items + 1)
+    elif prior_type == "restricted":
+        prior = np.random.rand(n_items + 1)
+        # Most items have preferences quite low (below 0.2)
+        prior *= BAD_ITEM_CONSTANT 
+        # First item is the best with maximum preferences
+        prior[0] = 1. * TOP_ITEM_CONSTANT
+    else:
+        raise ValueError("Incorrect prior type, choice of 'uniform', 'restricted'")
+    prior[-1] = 1.
+    return prior
+
+
 def print_regret(exp_names, exp_base_name):
     """
     :param exp_names: list of names for experiment data saved in the outputs folder
@@ -93,7 +127,7 @@ def print_regret(exp_names, exp_base_name):
 
         agent_name = AGENT_IDS[name.split('_')[0]]
         print(agent_name, n_runs, n_steps)
-        curve_name = f"{agent_name} agent." if 'ids' not in name else f"{agent_name} agent with {name.split('_')[1]} samples and {name.split('_')[2]} action selection"
+        curve_name = f"{agent_name} agent." if 'ids' not in name else f"{agent_name} agent, {name.split('_')[1]} samples, {name.split('_')[2]} action selection"
         plt.plot(np.arange(n_steps), cumulative_regret, label=curve_name)
 
     plt.xlabel('Time steps')
@@ -104,66 +138,8 @@ def print_regret(exp_names, exp_base_name):
     plt.close()
 
 
-def print_actions(exp_names):
-    """
-    :param exp_names: list of names for experiment data saved in the outputs folder
-    :return: action plots are saved in OUTPUTS_FOLDER
-    """
-    exp_base_name = exp_names[0].split('_')[1:]
-    exp_base_name = '_'.join(exp_base_name)
-    print(f"Action plot for experiments of type: {exp_base_name}")
-
-    plt.figure()
-    for name in exp_names:
-        exp_data = load_experiment_data(name)
-
-        assortments = sum([data_run['assortments'] for data_run in exp_data])
-        n_items = len(assortments)
-
-        picks = Counter()
-        for data_run in exp_data:
-            picks = picks + Counter(data_run['picks'])
-        picks_sum = sum([npicks for npicks in picks.values()])
-
-        agent_name = AGENT_IDS[name.split('_')[0]]
-        print(agent_name, n_items)
-        plt.scatter(np.arange(n_items + 1), [picks[item_id] / picks_sum for item_id in range(n_items)],
-                    label=f"Normalized picks for {agent_name} agent.")
-        plt.savefig(os.path.join(OUTPUTS_FOLDER, f'picks_{name}.png'))
-
-        plt.scatter(np.arange(n_items), assortments / assortments.sum(),
-                    label=f"Normalized assortments proposed by {agent_name} agent.")
-        plt.savefig(os.path.join(OUTPUTS_FOLDER, f'assortments_{name}.png'))
-
-    plt.legend()
-    plt.grid()
-    plt.close()
-
-def generate_hypersphere(dim, n_samples, norm=1):
-    if norm==1:
-        samples = np.random.rand(n_samples, dim)
-        samples = samples / np.expand_dims(np.abs(samples).sum(1), 1)
-        return samples
-    elif norm==2:
-        samples = np.random.randn(n_samples, dim)
-        samples = samples / np.expand_dims(np.sqrt((samples ** 2).sum(1)), 1)
-        return samples
-    else:
-        raise ValueError
-
-
 if __name__ == "__main__":
-    from argparse import ArgumentParser
-
-    parser = ArgumentParser()
-    parser.add_argument("--agents", type=str, required=True, help="select agents appearing on the plot", nargs='+')
-    parser.add_argument("-n", type=str, default='50', help="number of items in experiments plotted")
-    parser.add_argument("-k", type=str, default='3', help="size of the assortments in experiments plotted")
-    parser.add_argument("--horizon", type=str, default='100', help="horizon in experiments plotted")
-    parser.add_argument("--regret_plot", type=int, default=1, help="whether or not to plot regret curve of experiments")
-    parser.add_argument("--action_plot", type=int, default=0, help="whether or not to plot action selection analysis")
-    args = parser.parse_args()
-    experiment_base_name = '_'.join([args.n, args.k, args.horizon])
+    args = get_experiment_args(run_or_plot='plot')
+    experiment_base_name = '_'.join([str(x) for x in [args.n, args.k, args.horizon, args.name]])
     experiments_to_plot = [agent_key + '_' + experiment_base_name for agent_key in args.agents]
-    if args.regret_plot:
-        print_regret(experiments_to_plot, experiment_base_name)
+    print_regret(experiments_to_plot, experiment_base_name)
