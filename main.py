@@ -41,6 +41,7 @@ def run_episode(envnmt, actor, n_steps, verbose=False):
         obs[ix] = (assortment, item_selected)
         unnormalized_pick_proba = envnmt.preferences[assortment].sum()
         rewards[ix] = unnormalized_pick_proba / (1. + unnormalized_pick_proba)
+        # print(rewards[ix])
         # Print current posterior belief of the agent if asked
         if verbose and ((ix > n_steps - 2) or ((ix + 1) % 50 == 0) or (ix == 0)):
             print_actions_posteriors(agent=actor, past_observations=obs[:ix+1])
@@ -151,8 +152,8 @@ def scaler_search(args, agent_class, info_type):
     """
     print("Scale search begins:")
     # Grid search over the following possible values
-    scales = np.linspace(start=0., stop=0.1, num=10) 
-    best_rewards = 0.
+    scales = np.linspace(start=0., stop=0.1, num=25) 
+    best_rewards = - np.inf
     for scale in scales:
         # Instantiate the agent
         agent = agent_class(k=args.k,
@@ -160,6 +161,7 @@ def scaler_search(args, agent_class, info_type):
                             correlated_sampling=False,
                             horizon=args.horizon,
                             n_samples=args.ids_samples,
+                            limited_prefs=True if args.prior == "restricted" else False,
                             info_type=info_type,
                             action_type=args.ids_action_selection,
                             scaling_factor=scale,
@@ -169,13 +171,17 @@ def scaler_search(args, agent_class, info_type):
         for _ in range(args.best_scaler_n):
             run_preferences = get_prior(n_items=args.n, prior_type=args.prior) 
             env = AssortmentEnvironment(n=args.n, v=run_preferences)
+            top_preferences = np.sort(run_preferences)[-(args.k + 1):]
+            top_preferences = top_preferences / top_preferences.sum()
+            expected_reward_from_best_action = top_preferences[:args.k].sum()
+
             obs_run, rewards_run = run_episode(envnmt=env, actor=agent, n_steps=args.best_scaler_h)
-            sum_of_rewards += rewards_run.sum()
+            sum_of_rewards += (rewards_run - expected_reward_from_best_action).sum()
         sum_of_rewards = sum_of_rewards / args.best_scaler_n
         if sum_of_rewards > best_rewards:
             best_rewards = sum_of_rewards
             best_scale = scale
-            print(f"New best scaling factor:{scale} with rewards: {sum_of_rewards:.2f} over horizon: {args.best_scaler_h}") 
+            print(f"New best scaling factor:{scale} with average cumulative regret: {sum_of_rewards:.2f} over horizon: {args.best_scaler_h}") 
     return best_scale
             
 
@@ -203,7 +209,7 @@ if __name__ == "__main__":
     agent_class = AGENTS[agent_key]
 
     # Looking for the best approximation to true IDS action selection here
-    if agent_key == 'evids' and args.ids_action_selection == 'greedy' and args.find_best_scaler:
+    if ('ids' in agent_key) and (args.ids_action_selection == 'greedy') and args.find_best_scaler:
         args.greedy_scaler = scaler_search(args, agent_class, info_type)
 
     # Instantiating the agent before experiments

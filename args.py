@@ -18,7 +18,6 @@ def get_experiment_args(run_or_plot):
     parser.add_argument("--name", type=str, required=True,
                         help="identifier for the experiment, beyond agent_n_k_horizon")
 
-
     ##### ENV PARAMETERS
     parser.add_argument("-n", type=int, default=8,
                         help="number of items available")
@@ -28,7 +27,7 @@ def get_experiment_args(run_or_plot):
                         help="possible values: 'restricted', 'uniform'")
     
     ##### BASIC EXP PARAMETERS
-    parser.add_argument("--horizon", type=int, default=500,
+    parser.add_argument("--horizon", type=int, default=1000,
                         help="number of random simulations to carry out with agent")
     parser.add_argument("--nruns", type=int, default=100,
                         help="number of random simulations to carry out with agent")
@@ -42,13 +41,13 @@ def get_experiment_args(run_or_plot):
                         help="action selection: exact O(A**2), approximate O(A), greedy O(NK)")
     parser.add_argument("--greedy_scaler", type=float, default=0.05,
                         help="scaling factor for greedy action selection")
-    parser.add_argument("--find_best_scaler", type=int, default=0,
+    parser.add_argument("--find_best_scaler", type=int, default=1,
                         help="execute grid search for best greedy scaler")
     parser.add_argument("--best_scaler_h", type=int, default=200,
                         help="horizon for runs in the grid search")
     parser.add_argument("--best_scaler_n", type=int, default=10,
                         help="number of runs in the grid search")
-    
+
     ##### HYPERMODEL PARAMETERS
     parser.add_argument("--reg_weight", type=float, default=1.)
     parser.add_argument("--training_sigmaobs", type=float, default=0.2)

@@ -67,6 +67,8 @@ def g_full_numba(action, sampled_preferences, actions_star, counts, thetas):
                 if p_item_a_star_action:
                     g_a += p_item_a_star_action * np.log(p_item_a_star_action / (p_star * p_item_action))
     if (probs < 0.999) or (probs > 1.001):
+        # import ipdb;
+        # ipdb.set_trace()
         raise ValueError('Problem in IDS with probabilities not summing to 1')
     return g_a
 
@@ -133,6 +135,8 @@ def v_ids_numba(action, sampled_preferences, actions_star, counts, thetas):
         p_pick_a_star_action /= counts[j]
         v_a += p_star * (p_pick_a_star_action - expected_reward_action) ** 2
         probs += p_star
+    if (probs < 0.999) or (probs > 1.001):
+        raise ValueError('Problem in VIDS with probabilities not summing to 1')
     return v_a
 
 @numba.jit(nopython=True)
@@ -219,13 +223,13 @@ def greedy_ids_action_selection(scaling_factor, g_, sampled_preferences, r_star,
     n_items = sampled_preferences.shape[1]
     assortment_size = actions_star.shape[1]
     # Quantities to keep track off
-    min_information_difference = 1e8
     d1 = 0.
     g1 = 0.
     ids_action = np.zeros(assortment_size, dtype=np.int64)
     available_items = np.ones(n_items, dtype=np.int8)
     for current_size in range(assortment_size):
         current_action = np.copy(ids_action[:current_size+1])
+        min_information_difference = 1e8
         for item in range(n_items):
             if available_items[item]:
                 current_action[current_size] = item
@@ -237,35 +241,39 @@ def greedy_ids_action_selection(scaling_factor, g_, sampled_preferences, r_star,
                     value = current_delta ** 2 - scaling_factor * current_g
                 if value < min_information_difference:
                     min_information_difference = value
-                    # print("new information difference step 1")
-                    # print(value)
-                    # print('action')
-                    # print(ids_action)
                     d1 = current_delta
                     g1 = current_g
                     ids_action[current_size] = item
         available_items[ids_action[current_size]] = 0
+        # print("step")
+        # print(current_size)
+        # print("item picked")
+        # print(ids_action[current_size])
+        # print("available items now")
+        # print(available_items)
+        # print("current action")
+        # print(ids_action[:current_size+1])
         # import ipdb;
         # ipdb.set_trace()
     if not g1:
         return ids_action
     else:
-        min_information_difference = 1e8
         rho_val = 0.5
         action2 = np.zeros(assortment_size, dtype=np.int64)
         available_items = np.ones(n_items, dtype=np.int8)
         for current_size in range(assortment_size):
             current_action = np.copy(action2[:current_size+1])
+            min_information_difference = 1e8
             for item in range(n_items):
                 if available_items[item]:
                     current_action[current_size] = item
                     current_delta = delta_full_numba(current_action, sampled_preferences, r_star)
                     current_g = g_(current_action, sampled_preferences, actions_star, counts_star, thetas_star)
                     value, rho = optimized_ratio_numba(d1=d1,
-                                                        d2=current_delta,
-                                                        g1=g1,
-                                                        g2=current_g,
-                                                        scaler=scaling_factor)
+                                                       d2=current_delta,
+                                                       g1=g1,
+                                                       g2=current_g,
+                                                       scaler=scaling_factor)
                     if value < min_information_difference:
                         min_information_difference = value
                         action2[current_size] = item
@@ -277,6 +285,14 @@ def greedy_ids_action_selection(scaling_factor, g_, sampled_preferences, r_star,
                         # print('and')
                         # print(action2)
             available_items[action2[current_size]] = 0
+            # print("2 step")
+            # print(current_size)
+            # print("2 item picked")
+            # print(action2[current_size])
+            # print("2 available items now")
+            # print(available_items)
+            # print("2 current action")
+            # print(action2[:current_size+1])
         # import ipdb
         # ipdb.set_trace()
         action_picked = ids_action if np.random.rand() <= rho_val else action2

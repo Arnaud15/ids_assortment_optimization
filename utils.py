@@ -7,6 +7,7 @@ from args import get_experiment_args
 
 PAPER_EXPLORATION_BONUS = False # whether or not to employ the exploration bonus produced in the paper 
 PAPER_UNDEFINED_PRIOR = True # wheter or not to employ the paper's faulty gaussian approximations
+BETA_RVS = True
 BAD_ITEM_CONSTANT = 0.5 # max possible preference for bad items
 TOP_ITEM_CONSTANT = 1.
 OUTPUTS_FOLDER = 'outputs'
