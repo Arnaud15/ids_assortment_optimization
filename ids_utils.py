@@ -403,26 +403,3 @@ class InformationDirectedSampler:
         self.posterior_belief = new_belief
         self.update_r_star()
         self.update_optimal_actions()
-
-
-#TODO: VIDS numba
-
-#TODO: greedy information ratio
-# def v_full(action, sampled_preferences, opt_actions):
-#     if len(opt_actions.keys()) > 1:
-#         r_a_t_given_a_star = np.array(
-#             [expected_reward(sampled_preferences[thetas_a_star, :], action) for a_star, (p_a_star, thetas_a_star) in
-#              opt_actions.items()])
-#         probas_a_star = np.array([p_a_star for a_star, (p_a_star, thetas_a_star) in opt_actions.items()])
-#         return probas_a_star.dot(r_a_t_given_a_star ** 2) - (probas_a_star.dot(r_a_t_given_a_star)) ** 2
-#     else:
-#         return 0
-
-
-# def approximate_ids_action_selection(n, k, delta_, v_):
-#     v_information_ratios_items = - np.array([delta_([i]) ** 2 / v_([i]) for i in range(n)])
-#     if np.isinf(v_information_ratios_items.min()):
-#         v_information_ratios_items = - np.array([delta_([i]) for i in range(n)])
-#         return np.sort(np.argpartition(v_information_ratios_items, -k)[-k:])
-#     else:
-#         return np.sort(np.argpartition(v_information_ratios_items, -k)[-k:])

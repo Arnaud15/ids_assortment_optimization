@@ -152,7 +152,7 @@ def scaler_search(args, agent_class, info_type):
     """
     print("Scale search begins:")
     # Grid search over the following possible values
-    scales = np.linspace(start=0., stop=0.1, num=25) 
+    scales = np.linspace(start=0., stop=0.006, num=10) 
     best_rewards = - np.inf
     for scale in scales:
         # Instantiate the agent

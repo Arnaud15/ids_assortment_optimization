@@ -39,9 +39,9 @@ def get_experiment_args(run_or_plot):
                         help="number of posterior samples for IDS")
     parser.add_argument("--ids_action_selection", type=str, default='exact',
                         help="action selection: exact O(A**2), approximate O(A), greedy O(NK)")
-    parser.add_argument("--greedy_scaler", type=float, default=0.05,
+    parser.add_argument("--greedy_scaler", type=float, default=0.00316,
                         help="scaling factor for greedy action selection")
-    parser.add_argument("--find_best_scaler", type=int, default=1,
+    parser.add_argument("--find_best_scaler", type=int, default=0,
                         help="execute grid search for best greedy scaler")
     parser.add_argument("--best_scaler_h", type=int, default=200,
                         help="horizon for runs in the grid search")
