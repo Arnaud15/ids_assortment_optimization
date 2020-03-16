@@ -19,7 +19,7 @@ def get_experiment_args(run_or_plot):
                         help="identifier for the experiment, beyond agent_n_k_horizon")
 
     ##### ENV PARAMETERS
-    parser.add_argument("-n", type=int, default=8,
+    parser.add_argument("-n", type=int, default=1000,
                         help="number of items available")
     parser.add_argument("-k", type=int, default=3,
                         help="size of the assortments")
@@ -27,7 +27,7 @@ def get_experiment_args(run_or_plot):
                         help="possible values: 'restricted', 'uniform'")
     
     ##### BASIC EXP PARAMETERS
-    parser.add_argument("--horizon", type=int, default=1000,
+    parser.add_argument("--horizon", type=int, default=5000,
                         help="number of random simulations to carry out with agent")
     parser.add_argument("--nruns", type=int, default=100,
                         help="number of random simulations to carry out with agent")
@@ -41,9 +41,9 @@ def get_experiment_args(run_or_plot):
                         help="action selection: exact O(A**2), approximate O(A), greedy O(NK)")
     parser.add_argument("--greedy_scaler", type=float, default=0.00316,
                         help="scaling factor for greedy action selection")
-    parser.add_argument("--find_best_scaler", type=int, default=0,
+    parser.add_argument("--find_best_scaler", type=int, default=1,
                         help="execute grid search for best greedy scaler")
-    parser.add_argument("--best_scaler_h", type=int, default=200,
+    parser.add_argument("--best_scaler_h", type=int, default=1000,
                         help="horizon for runs in the grid search")
     parser.add_argument("--best_scaler_n", type=int, default=10,
                         help="number of runs in the grid search")
