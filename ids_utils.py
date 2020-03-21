@@ -67,8 +67,6 @@ def g_full_numba(action, sampled_preferences, actions_star, counts, thetas):
                 if p_item_a_star_action:
                     g_a += p_item_a_star_action * np.log(p_item_a_star_action / (p_star * p_item_action))
     if (probs < 0.999) or (probs > 1.001):
-        # import ipdb;
-        # ipdb.set_trace()
         raise ValueError('Problem in IDS with probabilities not summing to 1')
     return g_a
 
@@ -245,16 +243,6 @@ def greedy_ids_action_selection(scaling_factor, g_, sampled_preferences, r_star,
                     g1 = current_g
                     ids_action[current_size] = item
         available_items[ids_action[current_size]] = 0
-        # print("step")
-        # print(current_size)
-        # print("item picked")
-        # print(ids_action[current_size])
-        # print("available items now")
-        # print(available_items)
-        # print("current action")
-        # print(ids_action[:current_size+1])
-        # import ipdb;
-        # ipdb.set_trace()
     if not g1:
         return ids_action
     else:
@@ -278,23 +266,7 @@ def greedy_ids_action_selection(scaling_factor, g_, sampled_preferences, r_star,
                         min_information_difference = value
                         action2[current_size] = item
                         rho_val = rho
-                        # print("new information difference step 2")
-                        # print(value)
-                        # print('action')
-                        # print(ids_action)
-                        # print('and')
-                        # print(action2)
             available_items[action2[current_size]] = 0
-            # print("2 step")
-            # print(current_size)
-            # print("2 item picked")
-            # print(action2[current_size])
-            # print("2 available items now")
-            # print(available_items)
-            # print("2 current action")
-            # print(action2[:current_size+1])
-        # import ipdb
-        # ipdb.set_trace()
         action_picked = ids_action if np.random.rand() <= rho_val else action2
     return action_picked
 

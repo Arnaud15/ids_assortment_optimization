@@ -2,11 +2,10 @@ from env import AssortmentEnvironment
 from base_agents import RandomAgent
 from ts_agents import EpochSamplingTS, HypermodelTS
 from ids_agents import EpochSamplingIDS, HypermodelIDS
-from utils import save_experiment_data, print_actions_posteriors, get_prior
+from utils import save_experiment_data, print_actions_posteriors, get_prior, run_episode
 from scipy.stats import uniform
 import numpy as np
 import pickle 
-from tqdm import tqdm
 from args import get_experiment_args
 
 
@@ -17,41 +16,6 @@ AGENTS = {"rd": RandomAgent,
           "evids":EpochSamplingIDS,
           "hts": HypermodelTS,
           "hids": HypermodelIDS}
-
-
-def run_episode(envnmt, actor, n_steps, verbose=False):
-    """
-    :param envnmt: instance from the AssortmentEnvironment class
-    :param actor: instance from the Agent class
-    :param n_steps: horizon of the run in the environment
-    :return: (observations history = list of (assortment one-hot array of size N+1, 0<=index<=N of item picked),
-    rewards = 1D numpy array of size (horizon,) with entries = expected_reward from action taken given env parameters
-    """
-    # Initialization of observations and agent
-    actor.reset()  
-    rewards = np.zeros(n_steps)
-    obs = [0] * n_steps
-    iterator = tqdm(range(n_steps)) if not verbose else range(n_steps)
-    for ix in iterator:
-        # act / step / update
-        assortment = actor.act()
-        item_selected = envnmt.step(assortment)
-        actor.update(item_selected) 
-        # Store expected reward, observation
-        obs[ix] = (assortment, item_selected)
-        unnormalized_pick_proba = envnmt.preferences[assortment].sum()
-        rewards[ix] = unnormalized_pick_proba / (1. + unnormalized_pick_proba)
-        # print(rewards[ix])
-        # Print current posterior belief of the agent if asked
-        if verbose and ((ix > n_steps - 2) or ((ix + 1) % 50 == 0) or (ix == 0)):
-            print_actions_posteriors(agent=actor, past_observations=obs[:ix+1])
-    prefs_str = [f'{run_preference:.2f}' for run_preference in envnmt.preferences]
-
-    # Print environment model parameters if asked
-    if verbose:
-        print(f'Initial preferences were :{prefs_str}')
-        print(f'Best action was: {env.preferences.argsort()[-(args.k + 1):][::-1][1:]}')
-    return obs, rewards
 
 
 def summarize_run(observations):
@@ -248,11 +212,5 @@ else:
     import sys
     sys.exit("main should be used as a script")
 
-# TODO: hp search for hts
-# TODO: hts vs hids experiments
-# TODO: 5 choose 3 setting experiments
-
-# TODO: greedy algorithm
 # TODO: variational inference
-
 # TODO: check mcmc code
