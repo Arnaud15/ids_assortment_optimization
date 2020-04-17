@@ -4,6 +4,7 @@ from scipy.stats import beta
 from collections import defaultdict
 from hypermodels import NeuralModuleAssortmentOpt, LinearModuleAssortmentOpt, Hypermodel, HypermodelG
 from utils import generate_hypersphere, BAD_ITEM_CONSTANT, PAPER_EXPLORATION_BONUS, PAPER_UNDEFINED_PRIOR, TOP_ITEM_CONSTANT, BETA_RVS
+from variational_inference import variational_update
 from torch.utils.data import DataLoader
 import torch
 
@@ -144,6 +145,39 @@ class EpochSamplingAgent(Agent, abc.ABC):
     @abc.abstractmethod
     def proposal(self):
         pass
+
+
+class VariationalAgent(Agent, abc.ABC):
+    def __init__(self, k, n, n_samples=1):
+        Agent.__init__(self, k, n)
+        self.n_samples = n_samples
+        self.reset()
+
+    def sample_from_posterior(self, nsamples=1):
+        normal_samples = np.random.randn(nsamples, self.n_items)
+        samples = np.exp(normal_samples * np.abs(self.L) + self.mu)
+        return samples
+
+    def reset(self):
+        self.mu = np.zeros(self.n_items)
+        self.L = np.ones(self.n_items)
+        self.prior_belief = self.sample_from_posterior(self.n_samples)
+        self.picks = []
+        self.assortments = []
+
+    def update(self, item_selected):
+        reward = self.perceive_reward(item_selected) 
+        self.picks.append(item_selected)
+        self.mu, self.L = variational_update(mu=self.mu,
+                                             L=self.L,
+                                             items_picked=np.array(self.picks),
+                                             assortments=np.array(self.assortments))
+        self.prior_belief = self.sample_from_posterior(self.n_samples)
+        return reward
+    
+    def act(self):
+        raise NotImplementedError
+
 
 def f_assortment_optimization(thetas, x):
     """

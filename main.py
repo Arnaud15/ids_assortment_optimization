@@ -1,6 +1,6 @@
 from env import AssortmentEnvironment
 from base_agents import RandomAgent
-from ts_agents import EpochSamplingTS, HypermodelTS
+from ts_agents import EpochSamplingTS, HypermodelTS, VariationalTS
 from ids_agents import EpochSamplingIDS, HypermodelIDS
 from utils import save_experiment_data, print_actions_posteriors, get_prior, run_episode
 from scipy.stats import uniform
@@ -15,7 +15,8 @@ AGENTS = {"rd": RandomAgent,
           "eids": EpochSamplingIDS,
           "evids":EpochSamplingIDS,
           "hts": HypermodelTS,
-          "hids": HypermodelIDS}
+          "hids": HypermodelIDS,
+          "vts":VariationalTS}
 
 
 def summarize_run(observations):

@@ -1,5 +1,5 @@
 from utils import act_optimally
-from base_agents import EpochSamplingAgent, HypermodelAgent
+from base_agents import EpochSamplingAgent, HypermodelAgent, VariationalAgent
 import numpy as np
 
 
@@ -23,6 +23,15 @@ class HypermodelTS(HypermodelAgent):
     def act(self):
         action = act_optimally(np.squeeze(self.prior_belief), top_k=self.assortment_size)
         self.current_action = action
+        return action
+
+class VariationalTS(VariationalAgent):
+    def __init__(self, k, n, **kwargs):
+        VariationalAgent.__init__(self, k, n, n_samples=1)
+
+    def act(self):
+        action = act_optimally(np.squeeze(self.prior_belief), top_k=self.assortment_size)
+        self.assortments.append(action)
         return action
 
 

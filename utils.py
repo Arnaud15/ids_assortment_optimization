@@ -24,7 +24,8 @@ AGENT_IDS = {'ts': "Thompson Sampling",
              'hts': 'Hypermodel TS',
              "eids": "Epoch based IDS",
              "evids": "Epoch based VIDS",
-             'hids': "Hypermodel IDS"}
+             'hids': "Hypermodel IDS",
+             'vts': "Variational TS"}
 
 def run_episode(envnmt, actor, n_steps, verbose=False):
     """
@@ -57,7 +58,7 @@ def run_episode(envnmt, actor, n_steps, verbose=False):
     # Print environment model parameters if asked
     if verbose:
         print(f'Initial preferences were :{prefs_str}')
-        print(f'Best action was: {env.preferences.argsort()[-(args.k + 1):][::-1][1:]}')
+        print(f'Best action was: {envnmt.preferences.argsort()[-(actor.assortment_size + 1):][::-1][1:]}')
     return obs, rewards
 
 def save_experiment_data(exp_id, exp_data):
