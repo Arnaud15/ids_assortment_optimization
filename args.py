@@ -10,7 +10,7 @@ def get_experiment_args(run_or_plot):
             "--agent",
             type=str,
             required=True,
-            help="choice of ts, ids, rd, ets, eids, vts",
+            help="choice of ts, ids, rd, ets, eids",
         )
     elif run_or_plot == "plot":
         # AGENTS TO APPEAR ON PLOT
@@ -29,18 +29,29 @@ def get_experiment_args(run_or_plot):
         "--name",
         type=str,
         required=True,
-        help="identifier for the experiment, beyond agent_n_k_horizon",
+        help="identifier for the experiment, beyond agent_env_params",
     )
 
     # ENV PARAMETERS
-    parser.add_argument("-n", type=int, default=10, help="number of items available")
-    parser.add_argument("-k", type=int, default=3, help="size of the assortments")
+    parser.add_argument(
+        "-n", type=int, default=10, help="number of items available"
+    )
+    parser.add_argument(
+        "-k", type=int, default=3, help="size of the assortments"
+    )
     parser.add_argument(
         "--prior",
         type=str,
-        default="uniform",
-        help="possible values: 'restricted', 'uniform'",
+        default="full_sparse",
+        help="possible values: 'uniform', 'soft_sparse', 'full_sparse'",
     )
+    parser.add_argument(
+        "-p",
+        type=float,
+        default=0.5,
+        help="proba for the fallback item to be picked",
+    )
+    # TODO env prior and agents must be compatible
 
     # BASIC EXP PARAMETERS
     parser.add_argument(
@@ -62,7 +73,21 @@ def get_experiment_args(run_or_plot):
         help="print intermediate info during episodes or not",
     )
 
+    # Thompson Sampling PARAMETERS
+    parser.add_argument(
+        "--correlated_sampling",
+        type=int,
+        default=1,
+        help="correlated sampling or no",
+    )
+
     # Information Directed Sampling PARAMETERS
+    parser.add_argument(
+        "--info_type",
+        type=str,
+        default="gain",
+        help="choice of 'gain' and 'variance'",
+    )
     parser.add_argument(
         "--ids_samples",
         type=int,
@@ -84,7 +109,7 @@ def get_experiment_args(run_or_plot):
     parser.add_argument(
         "--find_best_scaler",
         type=int,
-        default=1,
+        default=0,
         help="execute grid search for best greedy scaler",
     )
     parser.add_argument(
@@ -99,15 +124,4 @@ def get_experiment_args(run_or_plot):
         default=10,
         help="number of runs in the grid search",
     )
-
-    # HYPERMODEL PARAMETERS
-    parser.add_argument("--reg_weight", type=float, default=1.0)
-    parser.add_argument("--training_sigmaobs", type=float, default=0.2)
-    parser.add_argument("--lr", type=float, default=1e-1)  # 1e-3 and reg 0.1 for mlp
-    parser.add_argument("--model_input_dim", type=int, default=10)
-    parser.add_argument("--nsteps", type=int, default=25)
-    parser.add_argument("--printinterval", type=int, default=0)
-    parser.add_argument("--batch_size", type=int, default=1024)
-    parser.add_argument("--nzsamples", type=int, default=32)
-
     return parser.parse_args()

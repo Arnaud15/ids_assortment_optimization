@@ -4,7 +4,8 @@ from utils import act_optimally
 from collections import defaultdict
 
 DISCRETIZATION_IDS = 25
-RHO_VALUES = np.linspace(start=0., stop=1., num=DISCRETIZATION_IDS)
+RHO_VALUES = np.linspace(start=0.0, stop=1.0, num=DISCRETIZATION_IDS)
+
 
 @numba.jit(nopython=True)
 def g_full_numba(action, sampled_preferences, actions_star, counts, thetas):
@@ -16,17 +17,19 @@ def g_full_numba(action, sampled_preferences, actions_star, counts, thetas):
     :param thetas: 1D array of the indices in [0, M-1] of the thetas associated w/ each opt action
     :return:
     """
-    g_a = 0.
-    probs = 0.
+    g_a = 0.0
+    probs = 0.0
     M = sampled_preferences.shape[0]
     K = action.shape[0]
     n_actions_star = actions_star.shape[0]
-    
-    probas_given_action = np.zeros((M, K))  # Probabilities of each item given action
-    no_pick_given_action = np.zeros((M,)) # Same for no pick given action
-    p_no_item_action = 0.
+
+    probas_given_action = np.zeros(
+        (M, K)
+    )  # Probabilities of each item given action
+    no_pick_given_action = np.zeros((M,))  # Same for no pick given action
+    p_no_item_action = 0.0
     for m in range(M):
-        sum_row = 0.
+        sum_row = 0.0
         for k in range(K):
             val = sampled_preferences[m, action[k]]
             probas_given_action[m, k] = val
@@ -38,18 +41,22 @@ def g_full_numba(action, sampled_preferences, actions_star, counts, thetas):
 
     probs += p_no_item_action
     theta_start = 0
-    for i in range(n_actions_star): # First we treat separately the y=NO_ITEM case
-        theta_indices = thetas[theta_start:theta_start+counts[i]]
+    for i in range(
+        n_actions_star
+    ):  # First we treat separately the y=NO_ITEM case
+        theta_indices = thetas[theta_start : theta_start + counts[i]]
         theta_start += counts[i]
         p_star = counts[i] / M
-        p_no_item_a_star_action = 0.
+        p_no_item_a_star_action = 0.0
         for theta_indice in theta_indices:
             p_no_item_a_star_action += no_pick_given_action[theta_indice]
         p_no_item_a_star_action = p_no_item_a_star_action / M
-        g_a += p_no_item_a_star_action * np.log(p_no_item_a_star_action / (p_star * p_no_item_action))
+        g_a += p_no_item_a_star_action * np.log(
+            p_no_item_a_star_action / (p_star * p_no_item_action)
+        )
 
-    for ix in range(K): # Now other y s are examined
-        p_item_action = 0.
+    for ix in range(K):  # Now other y s are examined
+        p_item_action = 0.0
         for m in range(M):
             p_item_action += probas_given_action[m, ix]
         p_item_action /= M
@@ -58,17 +65,22 @@ def g_full_numba(action, sampled_preferences, actions_star, counts, thetas):
             theta_start = 0
             for j in range(n_actions_star):
                 p_star = counts[j] / M
-                p_item_a_star_action = 0.
-                theta_indices = thetas[theta_start:theta_start+counts[j]]
+                p_item_a_star_action = 0.0
+                theta_indices = thetas[theta_start : theta_start + counts[j]]
                 for theta_indice in theta_indices:
-                    p_item_a_star_action += probas_given_action[theta_indice, ix]
+                    p_item_a_star_action += probas_given_action[
+                        theta_indice, ix
+                    ]
                 theta_start += counts[j]
                 p_item_a_star_action /= M
                 if p_item_a_star_action:
-                    g_a += p_item_a_star_action * np.log(p_item_a_star_action / (p_star * p_item_action))
+                    g_a += p_item_a_star_action * np.log(
+                        p_item_a_star_action / (p_star * p_item_action)
+                    )
     if (probs < 0.999) or (probs > 1.001):
-        raise ValueError('Problem in IDS with probabilities not summing to 1')
+        raise ValueError("Problem in IDS with probabilities not summing to 1")
     return g_a
+
 
 @numba.jit(nopython=True)
 def numba_expected_reward(pref, action):
@@ -79,13 +91,14 @@ def numba_expected_reward(pref, action):
     """
     M = pref.shape[0]
     K = action.shape[0]
-    result = 0.
+    result = 0.0
     for i in range(M):
-        temp_sum = 0.
+        temp_sum = 0.0
         for k in range(K):
             temp_sum += pref[i, action[k]]
         result += temp_sum / (1 + temp_sum)
     return result / M
+
 
 @numba.jit(nopython=True)
 def delta_full_numba(action, sampled_preferences, r_star):
@@ -98,6 +111,7 @@ def delta_full_numba(action, sampled_preferences, r_star):
     x = r_star - numba_expected_reward(action=action, pref=sampled_preferences)
     return x
 
+
 @numba.jit(nopython=True)
 def v_ids_numba(action, sampled_preferences, actions_star, counts, thetas):
     """
@@ -108,25 +122,27 @@ def v_ids_numba(action, sampled_preferences, actions_star, counts, thetas):
     :param thetas: 1D array of the indices in [0, M-1] of the thetas associated w/ each opt action
     :return:
     """
-    expected_reward_action = numba_expected_reward(pref=sampled_preferences, action=action)
+    expected_reward_action = numba_expected_reward(
+        pref=sampled_preferences, action=action
+    )
     M = sampled_preferences.shape[0]
     K = action.shape[0]
     n_opt_actions = actions_star.shape[0]
 
     pick_given_action = np.zeros(shape=(M,))
     for i in range(M):
-        sum_row = 0.
+        sum_row = 0.0
         for ix in range(K):
             sum_row += sampled_preferences[i, action[ix]]
-        pick_given_action[i] =  sum_row / (1 + sum_row)
-    
-    probs = 0.
+        pick_given_action[i] = sum_row / (1 + sum_row)
+
+    probs = 0.0
     theta_start = 0
     v_a = 0
     for j in range(n_opt_actions):
         p_star = counts[j] / M
-        p_pick_a_star_action = 0.
-        theta_indices = thetas[theta_start:theta_start+counts[j]]
+        p_pick_a_star_action = 0.0
+        theta_indices = thetas[theta_start : theta_start + counts[j]]
         for theta_indice in theta_indices:
             p_pick_a_star_action += pick_given_action[theta_indice]
         theta_start += counts[j]
@@ -134,19 +150,22 @@ def v_ids_numba(action, sampled_preferences, actions_star, counts, thetas):
         v_a += p_star * (p_pick_a_star_action - expected_reward_action) ** 2
         probs += p_star
     if (probs < 0.999) or (probs > 1.001):
-        raise ValueError('Problem in VIDS with probabilities not summing to 1')
+        raise ValueError("Problem in VIDS with probabilities not summing to 1")
     return v_a
+
 
 @numba.jit(nopython=True)
 def information_ratio_numba(rho, d1, d2, g1, g2):
     return (d1 * rho + (1 - rho) * d2) ** 2 / (g1 * rho + (1 - rho) * g2)
 
+
 @numba.jit(nopython=True)
 def information_difference(rho, d1, d2, v1, v2, eta):
     return (d1 * rho + (1 - rho) * d2) ** 2 - eta * (v1 * rho + (1 - rho) * v2)
 
+
 @numba.jit(nopython=True)
-def optimized_ratio_numba(d1, d2, g1, g2, scaler=0.):
+def optimized_ratio_numba(d1, d2, g1, g2, scaler=0.0):
     n_rho = RHO_VALUES.shape[0]
     min_ = 1e8
     rho_min = -1
@@ -163,7 +182,15 @@ def optimized_ratio_numba(d1, d2, g1, g2, scaler=0.):
 
 
 @numba.jit(nopython=True)
-def ids_action_selection_numba(g_, actions_set, sampled_preferences, r_star, actions_star, counts_star, thetas_star):
+def ids_action_selection_numba(
+    g_,
+    actions_set,
+    sampled_preferences,
+    r_star,
+    actions_star,
+    counts_star,
+    thetas_star,
+):
     """
     param: g_ = information_ratio computation function selected
     param: actions_set = possible actions given n, k
@@ -181,11 +208,23 @@ def ids_action_selection_numba(g_, actions_set, sampled_preferences, r_star, act
     n_actions = actions_set.shape[0]
     for i in range(n_actions):
         action1 = actions_set[i]
-        g_a1 = g_(action1, sampled_preferences, actions_star, counts_star, thetas_star)
+        g_a1 = g_(
+            action1,
+            sampled_preferences,
+            actions_star,
+            counts_star,
+            thetas_star,
+        )
         delta_1 = delta_full_numba(action1, sampled_preferences, r_star)
         for j in range(n_actions):
             action2 = actions_set[j]
-            g_a2 = g_(action2, sampled_preferences, actions_star, counts_star, thetas_star)
+            g_a2 = g_(
+                action2,
+                sampled_preferences,
+                actions_star,
+                counts_star,
+                thetas_star,
+            )
             delta_2 = delta_full_numba(action2, sampled_preferences, r_star)
             if (not g_a1) or (not g_a2):
                 if delta_1 < delta_2:
@@ -194,20 +233,28 @@ def ids_action_selection_numba(g_, actions_set, sampled_preferences, r_star, act
                 else:
                     value = delta_2
                     action_picked = action2
-                rho = 1. if delta_1 < delta_2 else 0.
+                rho = 1.0 if delta_1 < delta_2 else 0.0
             else:
-                value, rho = optimized_ratio_numba(d1=delta_1,
-                                                   d2=delta_2,
-                                                   g1=g_a1,
-                                                   g2=g_a2)
+                value, rho = optimized_ratio_numba(
+                    d1=delta_1, d2=delta_2, g1=g_a1, g2=g_a2
+                )
                 action_picked = action1 if np.random.rand() <= rho else action2
             if value < min_information_ratio:
                 min_information_ratio = value
                 ids_action = action_picked
     return ids_action
 
+
 @numba.jit(nopython=True)
-def greedy_ids_action_selection(scaling_factor, g_, sampled_preferences, r_star, actions_star, counts_star, thetas_star):
+def greedy_ids_action_selection(
+    scaling_factor,
+    g_,
+    sampled_preferences,
+    r_star,
+    actions_star,
+    counts_star,
+    thetas_star,
+):
     """
     param: g_ = information_ratio computation function selected
     param: actions_set = possible actions given n, k
@@ -221,18 +268,26 @@ def greedy_ids_action_selection(scaling_factor, g_, sampled_preferences, r_star,
     n_items = sampled_preferences.shape[1]
     assortment_size = actions_star.shape[1]
     # Quantities to keep track off
-    d1 = 0.
-    g1 = 0.
+    d1 = 0.0
+    g1 = 0.0
     ids_action = np.zeros(assortment_size, dtype=np.int64)
     available_items = np.ones(n_items, dtype=np.int8)
     for current_size in range(assortment_size):
-        current_action = np.copy(ids_action[:current_size+1])
+        current_action = np.copy(ids_action[: current_size + 1])
         min_information_difference = 1e8
         for item in range(n_items):
             if available_items[item]:
                 current_action[current_size] = item
-                current_delta = delta_full_numba(current_action, sampled_preferences, r_star)
-                current_g = g_(current_action, sampled_preferences, actions_star, counts_star, thetas_star)
+                current_delta = delta_full_numba(
+                    current_action, sampled_preferences, r_star
+                )
+                current_g = g_(
+                    current_action,
+                    sampled_preferences,
+                    actions_star,
+                    counts_star,
+                    thetas_star,
+                )
                 if not current_g:
                     value = current_delta
                 else:
@@ -250,18 +305,28 @@ def greedy_ids_action_selection(scaling_factor, g_, sampled_preferences, r_star,
         action2 = np.zeros(assortment_size, dtype=np.int64)
         available_items = np.ones(n_items, dtype=np.int8)
         for current_size in range(assortment_size):
-            current_action = np.copy(action2[:current_size+1])
+            current_action = np.copy(action2[: current_size + 1])
             min_information_difference = 1e8
             for item in range(n_items):
                 if available_items[item]:
                     current_action[current_size] = item
-                    current_delta = delta_full_numba(current_action, sampled_preferences, r_star)
-                    current_g = g_(current_action, sampled_preferences, actions_star, counts_star, thetas_star)
-                    value, rho = optimized_ratio_numba(d1=d1,
-                                                       d2=current_delta,
-                                                       g1=g1,
-                                                       g2=current_g,
-                                                       scaler=scaling_factor)
+                    current_delta = delta_full_numba(
+                        current_action, sampled_preferences, r_star
+                    )
+                    current_g = g_(
+                        current_action,
+                        sampled_preferences,
+                        actions_star,
+                        counts_star,
+                        thetas_star,
+                    )
+                    value, rho = optimized_ratio_numba(
+                        d1=d1,
+                        d2=current_delta,
+                        g1=g1,
+                        g2=current_g,
+                        scaler=scaling_factor,
+                    )
                     if value < min_information_difference:
                         min_information_difference = value
                         action2[current_size] = item
@@ -270,8 +335,17 @@ def greedy_ids_action_selection(scaling_factor, g_, sampled_preferences, r_star,
         action_picked = ids_action if np.random.rand() <= rho_val else action2
     return action_picked
 
+
 @numba.jit(nopython=True)
-def ids_action_selection_approximate(g_, actions_set, sampled_preferences, r_star, actions_star, counts_star, thetas_star):
+def ids_action_selection_approximate(
+    g_,
+    actions_set,
+    sampled_preferences,
+    r_star,
+    actions_star,
+    counts_star,
+    thetas_star,
+):
     """
     param: g_ = information_ratio computation function selected
     param: actions_set = possible actions given n, k
@@ -285,19 +359,25 @@ def ids_action_selection_approximate(g_, actions_set, sampled_preferences, r_sta
     np.random.shuffle(actions_set)
     # Quantities to keep track off
     min_information_ratio = 1e8
-    d1 = 0.
-    g1 = 0.
+    d1 = 0.0
+    g1 = 0.0
     ids_action = actions_set[0]
     n_actions = actions_set.shape[0]
     for i in range(n_actions):
         action1 = actions_set[i]
-        g_a1 = g_(action1, sampled_preferences, actions_star, counts_star, thetas_star)
+        g_a1 = g_(
+            action1,
+            sampled_preferences,
+            actions_star,
+            counts_star,
+            thetas_star,
+        )
         delta_1 = delta_full_numba(action1, sampled_preferences, r_star)
         if not g_a1:
             value = delta_1
         else:
             value = delta_1 ** 2 / g_a1
-        if  value < min_information_ratio:
+        if value < min_information_ratio:
             min_information_ratio = value
             d1 = delta_1
             g1 = g_a1
@@ -308,17 +388,23 @@ def ids_action_selection_approximate(g_, actions_set, sampled_preferences, r_sta
         action1 = ids_action
         for i in range(n_actions):
             action2 = actions_set[i]
-            g_a2 = g_(action2, sampled_preferences, actions_star, counts_star, thetas_star)
+            g_a2 = g_(
+                action2,
+                sampled_preferences,
+                actions_star,
+                counts_star,
+                thetas_star,
+            )
             delta_2 = delta_full_numba(action2, sampled_preferences, r_star)
-            value, rho = optimized_ratio_numba(d1=d1,
-                                            d2=delta_2,
-                                            g1=g1,
-                                            g2=g_a2)
+            value, rho = optimized_ratio_numba(
+                d1=d1, d2=delta_2, g1=g1, g2=g_a2
+            )
             action_picked = action1 if np.random.rand() <= rho else action2
-            if  value < min_information_ratio:
+            if value < min_information_ratio:
                 min_information_ratio = value
                 ids_action = action_picked
     return ids_action
+
 
 class InformationDirectedSampler:
     def __init__(self, assortment_size, n_samples, info_type):
@@ -331,24 +417,30 @@ class InformationDirectedSampler:
         self.init_sampler()
 
     def init_sampler(self):
-        self.posterior_belief = np.random.rand(self.n_samples, self.assortment_size)
+        self.posterior_belief = np.random.rand(
+            self.n_samples, self.assortment_size
+        )
         self.optimal_actions = None
         self.actions_star = None
         self.thetas_star = None
         self.counts_star = None
-        print(f'Info type is: {self.info_type}')
+        print(f"Info type is: {self.info_type}")
         if self.info_type == "IDS":
             self.g_ = g_full_numba
         elif self.info_type == "VIDS":
             self.g_ = v_ids_numba
         else:
-            raise ValueError('currently supported info types: IDS')
-        self.r_star = 0.
+            raise ValueError("currently supported info types: IDS")
+        self.r_star = 0.0
 
     def update_r_star(self):
-        sorted_beliefs = np.sort(self.posterior_belief, axis=1)[:, -self.assortment_size:]  # shape (m, k)
+        sorted_beliefs = np.sort(self.posterior_belief, axis=1)[
+            :, -self.assortment_size :
+        ]  # shape (m, k)
         picking_probabilities = sorted_beliefs.sum(1)
-        self.r_star = (picking_probabilities / (1 + picking_probabilities)).mean()
+        self.r_star = (
+            picking_probabilities / (1 + picking_probabilities)
+        ).mean()
 
     def update_optimal_actions(self):
         """
@@ -356,16 +448,26 @@ class InformationDirectedSampler:
         # keys: actions = sorted tuple of items to propose in the assortment
         # values: (p(action = a*), [thetas such that action is optimal for theta]
         """
-        posteriors_actions = act_optimally(self.posterior_belief, self.assortment_size)
-        posteriors_actions = [tuple(posteriors_actions[ix, :]) for ix in range(self.n_samples)]
+        posteriors_actions = act_optimally(
+            self.posterior_belief, self.assortment_size
+        )
+        posteriors_actions = [
+            tuple(posteriors_actions[ix, :]) for ix in range(self.n_samples)
+        ]
         optimal_actions_information = defaultdict(list)
         for ix, action in enumerate(posteriors_actions):
             optimal_actions_information[action].append(ix)
 
-        self.optimal_actions = {action: (len(theta_idxs) / self.n_samples, theta_idxs) for
-                                action, theta_idxs in optimal_actions_information.items()}
-        self.actions_star = np.array([list(key) for key in optimal_actions_information.keys()])
-        self.counts_star = np.array([len(val) for val in optimal_actions_information.values()])
+        self.optimal_actions = {
+            action: (len(theta_idxs) / self.n_samples, theta_idxs)
+            for action, theta_idxs in optimal_actions_information.items()
+        }
+        self.actions_star = np.array(
+            [list(key) for key in optimal_actions_information.keys()]
+        )
+        self.counts_star = np.array(
+            [len(val) for val in optimal_actions_information.values()]
+        )
         self.thetas_star = []
         for val in optimal_actions_information.values():
             self.thetas_star += val
