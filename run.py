@@ -2,12 +2,13 @@ from env import AssortmentEnvironment
 from base_agents import RandomAgent
 from ts_agents import EpochSamplingTS, SparseTS
 from ids_agents import EpochSamplingIDS, SparseIDS
-from utils import (
+from run_utils import (
     args_to_exp_id,
     proba_to_weight,
     get_prior,
     run_episode,
     save_experiment_data,
+    summarize_run,
 )
 import numpy as np
 from args import get_experiment_args
@@ -21,22 +22,6 @@ AGENTS = {
     "ts": SparseTS,
     "ids": SparseIDS,
 }
-
-# TODO: refactor inside of run.py
-def summarize_run(observations):
-    """
-    param: observations = [obs=(k-sparse assortment given, index of item selected) for obs in observations]
-    return: {assortments: 1D array of size K with how many times each item is proposed,
-             picks: 1D array with how many times each item if picked}
-    """
-    run_assortments = sum(
-        [assortment for assortment, item_picked in observations]
-    )
-    run_picks = {item_ix: 0 for item_ix in range(args.n + 1)}
-    for assortment, item_picked in observations:
-        run_picks[item_picked] += 1
-    return {"assortments": run_assortments, "picks": run_picks}
-
 
 # TODO: refactor the scaler search below
 def scaler_search(args, agent_class, info_type):
@@ -155,7 +140,7 @@ if __name__ == "__main__":
         )
 
         run_data["rewards"] = rewards_run
-        run_data.update(summarize_run(obs_run))
+        run_data.update(summarize_run(observations=obs_run, n_items=args.n))
 
         experiment_data.append(run_data)
 

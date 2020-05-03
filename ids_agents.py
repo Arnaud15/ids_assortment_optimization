@@ -4,10 +4,9 @@ from ids_utils import (
     ids_action_selection_approximate,
     greedy_ids_action_selection,
 )
-from utils import act_optimally
+from env import act_optimally, possible_actions
 from base_agents import Agent, EpochSamplingAgent
 import numpy as np
-from utils import possible_actions
 
 
 class EpochSamplingIDS(EpochSamplingAgent):
@@ -130,7 +129,7 @@ def sparse_information_ratio(
         alphas[alphas > 1.0 - 1e-12] = 1.0 - 1e-12
         gains = alphas * np.log(n_candidates) - (1 - alphas) * np.log(
             1 - alphas
-        )  # TODO: might be inf here
+        )
         assert not np.isinf(gains).any()
         gains = np.concatenate([gains[1:], gains[:-1]], axis=0)
     assert deltas.shape[0] == 2 * (max_new_proposed - min_new_proposed)

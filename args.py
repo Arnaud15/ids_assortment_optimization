@@ -1,4 +1,19 @@
 import argparse
+import os
+
+# EPOCH BASED SAMPLING PARAMS
+# Whether to employ the exploration bonus introduced in the paper
+PAPER_EXPLORATION_BONUS = False
+# Whether to employ the paper's faulty gaussian approximations
+PAPER_UNDEFINED_PRIOR = True
+BETA_RVS = True
+
+# SOFT_SPARSE SETTING PARAMS
+BAD_ITEM_CONSTANT = 0.5  # soft_sparse preference for bad items
+TOP_ITEM_CONSTANT = 1.0  # preference for (know) top item in soft-sparse
+OUTPUTS_FOLDER = "outputs"
+if not os.path.isdir(OUTPUTS_FOLDER):
+    os.makedirs(OUTPUTS_FOLDER)
 
 
 def get_experiment_args(run_or_plot):

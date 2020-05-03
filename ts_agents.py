@@ -1,7 +1,6 @@
-from utils import act_optimally
+from env import act_optimally
 from base_agents import Agent, EpochSamplingAgent
 import numpy as np
-from numba import jit
 
 
 class EpochSamplingTS(EpochSamplingAgent):

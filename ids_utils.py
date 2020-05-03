@@ -1,6 +1,6 @@
 import numba
 import numpy as np
-from utils import act_optimally
+from env import act_optimally
 from collections import defaultdict
 
 DISCRETIZATION_IDS = 25

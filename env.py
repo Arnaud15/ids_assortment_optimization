@@ -29,3 +29,27 @@ class AssortmentEnvironment(object):
             sum_preferences = subset_preferences.sum()
             probabilities = subset_preferences / sum_preferences
             return np.random.choice(possible_items, size=1, p=probabilities)[0]
+
+
+def act_optimally(belief, top_k):
+    noise_breaking_ties = np.random.randn(*belief.shape) * 1e-5
+    belief += noise_breaking_ties
+    if len(belief.shape) <= 1:
+        return np.sort(np.argpartition(belief, -top_k)[-top_k:])
+    else:
+        return np.sort(
+            np.argpartition(belief, -top_k, axis=1)[:, -top_k:], axis=1
+        )
+
+
+def possible_actions(n_items, assortment_size):
+    assert assortment_size >= 1
+    if assortment_size == 1:
+        return [[i] for i in range(n_items)]
+    else:
+        prev_lists = possible_actions(n_items, assortment_size - 1)
+        return [
+            prev_list + [i]
+            for prev_list in prev_lists
+            for i in range(prev_list[-1] + 1, n_items)
+        ]

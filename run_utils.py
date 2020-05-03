@@ -2,37 +2,10 @@ from typing import Tuple
 from argparse import Namespace
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 from collections import Counter
 import pickle
-from args import get_experiment_args
+from args import OUTPUTS_FOLDER, BAD_ITEM_CONSTANT, TOP_ITEM_CONSTANT
 from tqdm import tqdm
-
-# EPOCH BASED SAMPLING PARAMS
-# Whether to employ the exploration bonus introduced in the paper
-PAPER_EXPLORATION_BONUS = False
-# Whether to employ the paper's faulty gaussian approximations
-PAPER_UNDEFINED_PRIOR = True
-BETA_RVS = True
-
-# SOFT_SPARSE SETTING PARAMS
-BAD_ITEM_CONSTANT = 0.5  # soft_sparse preference for bad items
-TOP_ITEM_CONSTANT = 1.0  # preference for (know) top item in soft-sparse
-OUTPUTS_FOLDER = "outputs"
-if not os.path.isdir(OUTPUTS_FOLDER):
-    os.makedirs(OUTPUTS_FOLDER)
-
-AGENT_NAMES = {
-    "ts": "Thompson Sampling",
-    "tscs": "Thompson Sampling w/ Correlated Sampling",
-    "rd": "Random",
-    "idsgain": "Information Directed Sampling",
-    "idsvariance": "Variance-based IDS",
-    "ets": "Epoch based Thompson Sampling",
-    "etscs": "Epoch based TS w/ Correlated Sampling",
-    "eidsgain": "Epoch based IDS",
-    "eidsvariance": "Epoch based VIDS",
-}
 
 
 def args_to_exp_id(
@@ -118,6 +91,21 @@ def run_episode(envnmt, actor, n_steps, verbose=False):
     return obs, rewards
 
 
+def summarize_run(observations, n_items):
+    """
+    param: observations = [obs=(k-sparse assortment given, index of item selected) for obs in observations]
+    return: {assortments: 1D array of size K with how many times each item is proposed,
+             picks: 1D array with how many times each item if picked}
+    """
+    run_assortments = sum(
+        [assortment for assortment, item_picked in observations]
+    )
+    run_picks = {item_ix: 0 for item_ix in range(n_items + 1)}
+    for assortment, item_picked in observations:
+        run_picks[item_picked] += 1
+    return {"assortments": run_assortments, "picks": run_picks}
+
+
 def save_experiment_data(exp_id, exp_data):
     """
     :param exp_id: name of the experient data
@@ -145,30 +133,6 @@ def load_experiment_data(name):
     path = os.path.join(OUTPUTS_FOLDER, name + ".pickle")
     with open(path, "rb") as handle:
         return pickle.load(handle)
-
-
-def act_optimally(belief, top_k):
-    noise_breaking_ties = np.random.randn(*belief.shape) * 1e-5
-    belief += noise_breaking_ties
-    if len(belief.shape) <= 1:
-        return np.sort(np.argpartition(belief, -top_k)[-top_k:])
-    else:
-        return np.sort(
-            np.argpartition(belief, -top_k, axis=1)[:, -top_k:], axis=1
-        )
-
-
-def possible_actions(n_items, assortment_size):
-    assert assortment_size >= 1
-    if assortment_size == 1:
-        return [[i] for i in range(n_items)]
-    else:
-        prev_lists = possible_actions(n_items, assortment_size - 1)
-        return [
-            prev_list + [i]
-            for prev_list in prev_lists
-            for i in range(prev_list[-1] + 1, n_items)
-        ]  # TODO fix with greedy
 
 
 def print_actions_posteriors(agent, past_observations):
@@ -213,52 +177,3 @@ def get_prior(
         raise ValueError("Choice of 'uniform', 'soft_sparse', 'full_sparse'")
     prior[-1] = 1.0
     return prior
-
-
-def print_regret(exp_names, exp_base_name):
-    """
-    :param exp_names: exp_ids saved in the outputs folder
-    :return: regret plots are saved in OUTPUTS_FOLDER
-    """
-    print(f"Regret plot for experiments of type: {exp_base_name}")
-
-    plt.figure()
-
-    for name in exp_names:
-        exp_data = load_experiment_data(name)
-
-        n_runs = len(exp_data)
-        regrets = (
-            sum([run["best_reward"] - run["rewards"] for run in exp_data])
-            / n_runs
-        )
-        n_steps = regrets.shape[0]
-        cumulative_regret = np.cumsum(regrets)
-
-        agent_name = AGENT_NAMES[name.split("_")[0]]
-        print(agent_name, n_runs, n_steps)
-        curve_name = (
-            f"{agent_name} agent."
-        )
-        plt.plot(np.arange(n_steps), cumulative_regret, label=curve_name)
-
-    plt.xlabel("Time steps")
-    plt.ylabel("Regret")
-    plt.legend()
-    plt.grid()
-    plt.savefig(os.path.join(OUTPUTS_FOLDER, f"regret_{exp_base_name}.png"))
-    plt.close()
-
-
-if __name__ == "__main__":
-    args = get_experiment_args(run_or_plot="plot")
-
-    exp_base_name, _ = args_to_exp_id(
-        agent_name=None, args=args, plotting=True
-    )
-    experiments_to_plot = [
-        args_to_exp_id(agent_name=agent_key, args=args, plotting=True)[1]
-        for agent_key in args.agents
-    ]
-    print(experiments_to_plot)
-    print_regret(experiments_to_plot, exp_base_name)
