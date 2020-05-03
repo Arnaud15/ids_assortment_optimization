@@ -13,8 +13,10 @@ def g_full_numba(action, sampled_preferences, actions_star, counts, thetas):
     :param action: 1D array of size (K,) with the indices of the current action
     :param sampled_preferences: sampled posterior thetas of shape (M, N)
     :param actions_star: 2D array of shape (n_top_actions, assortment_size)
-    :param counts: 1D array of shape (n_top_actions,) = how many theta for each opt action 
-    :param thetas: 1D array of the indices in [0, M-1] of the thetas associated w/ each opt action
+    :param counts: 1D array of shape (n_top_actions,)
+     = how many theta for each opt action
+    :param thetas: 1D array of indices in [0, M-1]
+    of the thetas associated w/ each opt action
     :return:
     """
     g_a = 0.0
@@ -44,7 +46,7 @@ def g_full_numba(action, sampled_preferences, actions_star, counts, thetas):
     for i in range(
         n_actions_star
     ):  # First we treat separately the y=NO_ITEM case
-        theta_indices = thetas[theta_start : theta_start + counts[i]]
+        theta_indices = thetas[theta_start: theta_start + counts[i]]
         theta_start += counts[i]
         p_star = counts[i] / M
         p_no_item_a_star_action = 0.0
@@ -66,7 +68,7 @@ def g_full_numba(action, sampled_preferences, actions_star, counts, thetas):
             for j in range(n_actions_star):
                 p_star = counts[j] / M
                 p_item_a_star_action = 0.0
-                theta_indices = thetas[theta_start : theta_start + counts[j]]
+                theta_indices = thetas[theta_start: theta_start + counts[j]]
                 for theta_indice in theta_indices:
                     p_item_a_star_action += probas_given_action[
                         theta_indice, ix
@@ -105,7 +107,8 @@ def delta_full_numba(action, sampled_preferences, r_star):
     """
     param: action 1D array of shape (K,) items selected in assortment
     param: preferences 2D array shape (M, N) sampled preferences
-    param: r_star expected reward from taking optimal action for each theta model possible
+    param: r_star expected reward from taking optimal action
+    for each theta model possible
     return: r_star - exp_reward
     """
     x = r_star - numba_expected_reward(action=action, pref=sampled_preferences)
@@ -118,8 +121,10 @@ def v_ids_numba(action, sampled_preferences, actions_star, counts, thetas):
     :param action: 1D array of size (K,) with the indices of the current action
     :param sampled_preferences: sampled posterior thetas of shape (M, N)
     :param actions_star: 2D array of shape (n_top_actions, assortment_size)
-    :param counts: 1D array of shape (n_top_actions,) = how many theta for each opt action 
-    :param thetas: 1D array of the indices in [0, M-1] of the thetas associated w/ each opt action
+    :param counts: 1D array of shape (n_top_actions,)
+    = how many theta for each opt action
+    :param thetas: 1D array of the indices in [0, M-1]
+    of the thetas associated w/ each opt action
     :return:
     """
     expected_reward_action = numba_expected_reward(
@@ -142,7 +147,7 @@ def v_ids_numba(action, sampled_preferences, actions_star, counts, thetas):
     for j in range(n_opt_actions):
         p_star = counts[j] / M
         p_pick_a_star_action = 0.0
-        theta_indices = thetas[theta_start : theta_start + counts[j]]
+        theta_indices = thetas[theta_start: theta_start + counts[j]]
         for theta_indice in theta_indices:
             p_pick_a_star_action += pick_given_action[theta_indice]
         theta_start += counts[j]
@@ -195,10 +200,13 @@ def ids_action_selection_numba(
     param: g_ = information_ratio computation function selected
     param: actions_set = possible actions given n, k
     param: preferences 2D array shape (M, N) sampled preferences
-    param: r_star expected reward from taking optimal action for each theta model possible
+    param: r_star expected reward from taking optimal action
+    for each theta model possible
     :param actions_star: 2D array of shape (n_top_actions, assortment_size)
-    :param counts: 1D array of shape (n_top_actions,) = how many theta for each opt action 
-    :param thetas: 1D array of the indices in [0, M-1] of the thetas associated w/ each opt action
+    :param counts: 1D array of shape (n_top_actions,)
+    = how many theta for each opt action
+    :param thetas: 1D array of the indices in [0, M-1]
+    of the thetas associated w/ each opt action
     """
     # Shuffling the actions set
     np.random.shuffle(actions_set)
@@ -259,10 +267,13 @@ def greedy_ids_action_selection(
     param: g_ = information_ratio computation function selected
     param: actions_set = possible actions given n, k
     param: preferences 2D array shape (M, N) sampled preferences
-    param: r_star expected reward from taking optimal action for each theta model possible
+    param: r_star expected reward from taking optimal action
+    for each theta model possible
     :param actions_star: 2D array of shape (n_top_actions, assortment_size)
-    :param counts: 1D array of shape (n_top_actions,) = how many theta for each opt action 
-    :param thetas: 1D array of the indices in [0, M-1] of the thetas associated w/ each opt action
+    :param counts: 1D array of shape (n_top_actions,)
+    = how many theta for each opt action
+    :param thetas: 1D array of the indices in [0, M-1]
+    of the thetas associated w/ each opt action
     """
     # Number of items and assortment size are key:
     n_items = sampled_preferences.shape[1]
@@ -350,10 +361,13 @@ def ids_action_selection_approximate(
     param: g_ = information_ratio computation function selected
     param: actions_set = possible actions given n, k
     param: preferences 2D array shape (M, N) sampled preferences
-    param: r_star expected reward from taking optimal action for each theta model possible
+    param: r_star expected reward from taking optimal action
+    for each theta model possible
     :param actions_star: 2D array of shape (n_top_actions, assortment_size)
-    :param counts: 1D array of shape (n_top_actions,) = how many theta for each opt action 
-    :param thetas: 1D array of the indices in [0, M-1] of the thetas associated w/ each opt action
+    :param counts: 1D array of shape (n_top_actions,)
+    = how many theta for each opt action
+    :param thetas: 1D array of the indices in [0, M-1]
+    of the thetas associated w/ each opt action
     """
     # Shuffling the actions set
     np.random.shuffle(actions_set)
@@ -408,9 +422,6 @@ def ids_action_selection_approximate(
 
 class InformationDirectedSampler:
     def __init__(self, assortment_size, n_samples, info_type):
-        """
-        info_type == IDS for information ratio or VIDS or variance-based information ratio
-        """
         self.assortment_size = assortment_size
         self.n_samples = n_samples
         self.info_type = info_type
@@ -435,7 +446,7 @@ class InformationDirectedSampler:
 
     def update_r_star(self):
         sorted_beliefs = np.sort(self.posterior_belief, axis=1)[
-            :, -self.assortment_size :
+            :, -self.assortment_size:
         ]  # shape (m, k)
         picking_probabilities = sorted_beliefs.sum(1)
         self.r_star = (
@@ -444,9 +455,11 @@ class InformationDirectedSampler:
 
     def update_optimal_actions(self):
         """
-        :return: dictionary of informations about optimal action for each posterior sample of the model parameters
+        :return: dictionary of informations about optimal action
+        for each posterior sample of the model parameters
         # keys: actions = sorted tuple of items to propose in the assortment
-        # values: (p(action = a*), [thetas such that action is optimal for theta]
+        # values: (p(action = a*),
+        [thetas such that action is optimal for theta]
         """
         posteriors_actions = act_optimally(
             self.posterior_belief, self.assortment_size

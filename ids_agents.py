@@ -36,8 +36,9 @@ class EpochSamplingIDS(EpochSamplingAgent):
         self.action_selection = action_type
         self.scaling_factor = scaling_factor
         print(
-            f"Action selection mode is {self.action_selection}, with scaling factor: {self.scaling_factor}"
+            f"Action selection+{self.action_selection}"
         )
+        print(f"scaling factor: {self.scaling_factor}"
         if self.action_selection != "greedy":
             self.all_actions = np.array(
                 possible_actions(self.n_items, self.assortment_size), dtype=int
@@ -86,7 +87,7 @@ class EpochSamplingIDS(EpochSamplingAgent):
             )
         else:
             raise ValueError(
-                "Incorrect action selection method (exact | approximate | greedy)"
+                "Must be one of (exact | approximate | greedy)"
             )
         self.current_action = action
         return action
@@ -161,8 +162,8 @@ class SparseIDS(Agent):
 
     def sample_from_posterior(self, n_samples: int) -> np.ndarray:
         """
-            :param n_samples: number of posterior samples desired
-            :return samples: item preferences for each sample, of shape (n_samples, N)
+        :param n_samples: number of posterior samples desired
+        :return samples: item preferences for each sample, size (n_samples, N)
         """
         samples = np.zeros(shape=(n_samples, self.n_items))
         if self.top_item_index is not None:

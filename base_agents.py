@@ -2,7 +2,7 @@ import numpy as np
 import abc
 from scipy.stats import beta
 from collections import defaultdict
-from utils import (
+from args import (
     BAD_ITEM_CONSTANT,
     PAPER_EXPLORATION_BONUS,
     PAPER_UNDEFINED_PRIOR,
@@ -28,7 +28,8 @@ class Agent(abc.ABC):
     def sample_from_posterior(self, n_samples):
         """
         input is number of samples
-        output of shape (n_samples, n_items) are the samples beliefs in (0, 1) for each sample, item
+        output of shape (n_samples, n_items)
+         = sampled beliefs in (0, 1) for each sample, item
         """
         pass
 
@@ -81,7 +82,7 @@ class EpochSamplingAgent(Agent, abc.ABC):
         self.T = horizon
         self.first_item_best = True if limited_preferences else False
         print(
-            f"Agent believes that first item is the best: {self.first_item_best}"
+            f"Agent believes first=best? {self.first_item_best}"
         )
         self.reset()
 
@@ -111,9 +112,11 @@ class EpochSamplingAgent(Agent, abc.ABC):
                 0,
             )
         else:
-            # Simply approximating the 1 / Beta(alpha, beta) - 1 by a normal distribution
+            # Simply approximating the 1 / Beta(alpha, beta) - 1
+            # by a normal distribution
             if PAPER_UNDEFINED_PRIOR:
-                # In the paper, they make a strong approximation as 1/beta - 1 has no well-defined mean / variance
+                # In the paper, they make a strong approximation as 1/beta - 1
+                # has no well-defined mean / variance
                 gaussian_stds = np.expand_dims(
                     [
                         np.sqrt(b_ / a_ * ((b_ / a_) + 1) / a_)
@@ -125,7 +128,8 @@ class EpochSamplingAgent(Agent, abc.ABC):
                     [b_ / a_ for (a_, b_) in self.posterior_parameters], 0
                 )
             else:
-                # In our setting, we start with a (3, 3) prior for each item, having a well-defined mean / variance
+                # In our setting, we start with a (3, 3) prior for each item
+                #  having a well-defined mean / variance
                 gaussian_stds = np.expand_dims(
                     [
                         np.sqrt(
@@ -166,14 +170,12 @@ class EpochSamplingAgent(Agent, abc.ABC):
         else:
             self.posterior_parameters = [(3, 3) for _ in range(self.n_items)]
         if self.first_item_best:
-            # Correcting the prior when we know that a single item is "worth it"
+            # Corrected prior when we know that a single item is "worth it"
             self.posterior_parameters = [
                 (a_, b_ * BAD_ITEM_CONSTANT)
                 for (a_, b_) in self.posterior_parameters
             ]
             self.posterior_parameters[0] = (1e5, 1e5 * TOP_ITEM_CONSTANT)
-        # print(f"ES Agent initialized, with prior parameters: {self.posterior_parameters}")
-        # print(f"and exploration bonus: {PAPER_EXPLORATION_BONUS}, undefined prior: {PAPER_UNDEFINED_PRIOR}")
 
     def update(self, item_selected):
         reward = self.perceive_reward(item_selected)

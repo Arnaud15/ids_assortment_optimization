@@ -49,8 +49,10 @@ def run_episode(envnmt, actor, n_steps, verbose=False):
     :param envnmt: instance from the AssortmentEnvironment class
     :param actor: instance from the Agent class
     :param n_steps: horizon of the run in the environment
-    :return: (observations history = list of (assortment one-hot array of size N+1, 0<=index<=N of item picked),
-    rewards = 1D numpy array of size (horizon,) with entries = expected_reward from action taken given env parameters
+    :return: (observations history =
+    list of (assortment one-hot array of size N+1, 0<=index<=N of item picked),
+    rewards = 1D numpy array of size (horizon,)
+    with entries = expected_reward from action taken given env parameters
     """
     # Initialization of observations and agent
     envnmt.reset()
@@ -83,18 +85,21 @@ def run_episode(envnmt, actor, n_steps, verbose=False):
     ]
 
     # Print environment model parameters if asked
+    ba = envnmt.preferences.argsort()[-(actor.assortment_size + 1):][::-1][1:]
     if verbose:
         print(f"Initial preferences were :{prefs_str}")
         print(
-            f"Best action was: {envnmt.preferences.argsort()[-(actor.assortment_size + 1):][::-1][1:]}"
+            f"Best action was: {ba}"
         )
     return obs, rewards
 
 
 def summarize_run(observations, n_items):
     """
-    param: observations = [obs=(k-sparse assortment given, index of item selected) for obs in observations]
-    return: {assortments: 1D array of size K with how many times each item is proposed,
+    param: observations = [obs=(k-sparse assortment given,
+    index of item selected) for obs in observations]
+    return: {assortments:
+    1D array of size K with how many times each item is proposed,
              picks: 1D array with how many times each item if picked}
     """
     run_assortments = sum(
@@ -156,9 +161,9 @@ def get_prior(
     n_items: int, prior_type: str, fallback_weight: float
 ) -> np.ndarray:
     """
-        :param n_items:int: N parameter = number of items 
-        :param fallback_weight = weight of the fallback_item
-        :param prior_type: choice of (uniform, soft_sparse, full_sparse) 
+    :param n_items:int: N parameter = number of items
+    :param fallback_weight = weight of the fallback_item
+    :param prior_type: choice of (uniform, soft_sparse, full_sparse)
     """
     if prior_type == "uniform":
         prior = np.random.rand(n_items + 1)

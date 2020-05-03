@@ -83,3 +83,4 @@ if __name__ == "__main__":
     ]
     print(experiments_to_plot)
     print_regret(experiments_to_plot, exp_base_name)
+

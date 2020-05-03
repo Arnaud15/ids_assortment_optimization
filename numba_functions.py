@@ -56,7 +56,7 @@ def g_full_numba(action, sampled_preferences, opt_actions, counts, thetas):
             for j in range(n_opt_actions):
                 p_star = counts[j] / M
                 p_item_a_star_action = 0.0
-                theta_indices = thetas[theta_start : theta_start + counts[j]]
+                theta_indices = thetas[theta_start: theta_start + counts[j]]
                 for theta_indice in theta_indices:
                     p_item_a_star_action += probas_given_action[
                         theta_indice, action[ix]

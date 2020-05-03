@@ -5,7 +5,7 @@ class AssortmentEnvironment(object):
     def __init__(self, n, v):
         self.items = np.arange(n + 1)
         self.n_items = n
-        self.preferences = v  # preference are in (0, 1) for all items in [1, ..., N], 1 for "no item"
+        self.preferences = v
 
     def reset(self):
         if np.isinf(self.preferences).any():
@@ -15,8 +15,10 @@ class AssortmentEnvironment(object):
 
     def step(self, assortment):
         """
-        :param assortment: array of K integers that specify the assortment, should be K distinct integers in [0, N-1]
-        :return: obs: index of the item selected in [0, ..., n] -> n is when "no item" is selected
+        :param assortment: array of K integers that specify the assortment,
+        should be K distinct integers in [0, N-1]
+        :return: obs: index of the item selected in [0, ..., n]
+        -> n is when "no item" is selected
         """
         assert self.preferences[self.n_items] == 1.0
         if self.top_item is not None and self.top_item in assortment:
