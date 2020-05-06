@@ -19,7 +19,6 @@ class EpochSamplingIDS(EpochSamplingAgent):
         n_samples,
         info_type,
         action_type,
-        action_set=False,
         scaling_factor=0.0,
         **kwargs,
     ):
@@ -38,18 +37,13 @@ class EpochSamplingIDS(EpochSamplingAgent):
         self.scaling_factor = scaling_factor
         print(f"Action selection+{self.action_selection}")
         print(f"scaling factor: {self.scaling_factor}")
-        if self.action_selection != "greedy":
+        if self.action_selection == "exact":
             self.all_actions = (
                 np.array(
                     possible_actions(self.n_items, self.assortment_size),
                     dtype=int,
                 )
-                if not action_set
-                else None
             )
-
-    def set_actions(self, actions_set):
-        self.all_actions = actions_set
 
     def proposal(self):
         self.prior_belief = self.sample_from_posterior(

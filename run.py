@@ -10,7 +10,6 @@ from run_utils import (
     save_experiment_data,
     summarize_run,
 )
-from submodular_actions import observations_to_actions
 import numpy as np
 from args import get_experiment_args
 
@@ -120,7 +119,6 @@ if __name__ == "__main__":
         info_type=args.info_type,
         action_type=args.ids_action_selection,
         scaling_factor=args.greedy_scaler,
-        action_set=True if args.submod else False,
         params=args,
     )
 
@@ -140,15 +138,6 @@ if __name__ == "__main__":
             top_preferences = top_preferences / top_preferences.sum()
             expected_reward_from_best_action = top_preferences[: args.k].sum()
 
-        if args.agent == "eids" and args.submod:
-            rd_agent = RandomAgent(k=args.k, n=args.n,)
-            obs_run, _ = run_episode(
-                envnmt=env, actor=rd_agent, n_steps=10000, verbose=False
-            )
-            limited_actions = observations_to_actions(
-                obs_run=obs_run, n_items=args.n, m_actions=args.m
-            )
-            agent.set_actions(limited_actions)
         run_data = {"best_reward": expected_reward_from_best_action}
         obs_run, rewards_run = run_episode(
             envnmt=env, actor=agent, n_steps=args.horizon, verbose=args.verbose
