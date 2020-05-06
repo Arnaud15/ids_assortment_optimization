@@ -48,8 +48,8 @@ class SparseTS(Agent):
 
     def sample_from_posterior(self, n_samples: int) -> np.ndarray:
         """
-            :param n_samples: number of posterior samples desired
-            :return samples: item preferences for each sample, of shape (n_samples, N)
+        :param n_samples: number of posterior samples desired
+        :return samples: item preferences for each sample, of shape (n_samples, N)
         """
         samples = np.zeros(shape=(n_samples, self.n_items))
         if self.top_item_index is not None:

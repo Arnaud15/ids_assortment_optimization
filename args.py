@@ -139,4 +139,16 @@ def get_experiment_args(run_or_plot):
         default=10,
         help="number of runs in the grid search",
     )
+    parser.add_argument(
+        "-m",
+        type=int,
+        default=25,
+        help="number of actions in action space reduction",
+    )
+    parser.add_argument(
+        "--submod",
+        type=int,
+        default=0,
+        help="whether to employ action space restriction",
+    )
     return parser.parse_args()

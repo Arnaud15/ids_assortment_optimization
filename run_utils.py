@@ -85,12 +85,10 @@ def run_episode(envnmt, actor, n_steps, verbose=False):
     ]
 
     # Print environment model parameters if asked
-    ba = envnmt.preferences.argsort()[-(actor.assortment_size + 1):][::-1][1:]
+    ba = envnmt.preferences.argsort()[-(actor.assortment_size + 1) :][::-1][1:]
     if verbose:
         print(f"Initial preferences were :{prefs_str}")
-        print(
-            f"Best action was: {ba}"
-        )
+        print(f"Best action was: {ba}")
     return obs, rewards
 
 

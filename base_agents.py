@@ -81,9 +81,7 @@ class EpochSamplingAgent(Agent, abc.ABC):
         self.correlated_sampling = correlated_sampling
         self.T = horizon
         self.first_item_best = True if limited_preferences else False
-        print(
-            f"Agent believes first=best? {self.first_item_best}"
-        )
+        print(f"Agent believes first=best? {self.first_item_best}")
         self.reset()
 
     def act(self):
