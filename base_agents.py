@@ -15,6 +15,7 @@ class Agent(abc.ABC):
     def __init__(self, k, n):
         self.assortment_size = k
         self.n_items = n
+        self.data_stored = None
 
     @abc.abstractmethod
     def act(self):
@@ -39,6 +40,9 @@ class Agent(abc.ABC):
         :return: reward of 1. if any item is selected, 0. otherwise
         """
         return 1.0 if item < self.n_items else 0.0
+    
+    def stored_info(self):
+        return self.data_stored
 
     @abc.abstractmethod
     def update(self, item_selected):
@@ -86,8 +90,10 @@ class EpochSamplingAgent(Agent, abc.ABC):
 
     def act(self):
         if self.epoch_ended:
+            self.data_stored['steps'].append("new")
             action = self.proposal()
         else:
+            self.data_stored['steps'].append("same")
             action = self.current_action
         return action
 
@@ -174,6 +180,7 @@ class EpochSamplingAgent(Agent, abc.ABC):
                 for (a_, b_) in self.posterior_parameters
             ]
             self.posterior_parameters[0] = (1e5, 1e5 * TOP_ITEM_CONSTANT)
+        self.data_stored = defaultdict(list)
 
     def update(self, item_selected):
         reward = self.perceive_reward(item_selected)

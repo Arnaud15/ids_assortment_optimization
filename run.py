@@ -79,10 +79,10 @@ if __name__ == "__main__":
 
     # Printing environment type = prior distribution for environment parameters
     print(f"Environment type is: {args.prior}.")
-    if args.agent[0] == 'e':
-        assert(args.prior in {"uniform", "soft_sparse"})
+    if args.agent[0] == "e":
+        assert args.prior in {"uniform", "soft_sparse"}
     elif args.agent != "rd":
-        assert(args.prior == "full_sparse")
+        assert args.prior == "full_sparse"
     # TODO arg for env type: three possibilities = uniform, soft_sparse, full_sparse
 
     # Parsing agent name and parameters
@@ -139,7 +139,7 @@ if __name__ == "__main__":
             expected_reward_from_best_action = top_preferences[: args.k].sum()
 
         run_data = {"best_reward": expected_reward_from_best_action}
-        obs_run, rewards_run = run_episode(
+        obs_run, rewards_run, _ = run_episode(
             envnmt=env, actor=agent, n_steps=args.horizon, verbose=args.verbose
         )
 

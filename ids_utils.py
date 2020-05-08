@@ -243,7 +243,7 @@ def ids_action_selection_numba(
             if value < min_information_ratio:
                 min_information_ratio = value
                 ids_action = action_picked
-    return ids_action
+    return ids_action, min_information_ratio
 
 
 @numba.jit(nopython=True)
@@ -337,13 +337,75 @@ def greedy_ids_action_selection(
                         rho_val = rho
             available_items[action2[current_size]] = 0
         action_picked = ids_action if np.random.rand() <= rho_val else action2
+    return action_picked, 0.0
+
+
+@numba.jit(nopython=True)
+def insert_numba(forbidden, current_elt):
+    for elt in forbidden:
+        if current_elt == elt:
+            return False
+    return True
+
+
+@numba.jit(nopython=True)
+def numba_top(input_arr, forbidden, size):
+    count = 0
+    output_top = np.zeros(size, dtype=np.int64)
+    for ix in range(input_arr.shape[0]):
+        current_elt = input_arr[ix]
+        insert = insert_numba(forbidden, current_elt)
+        if insert:
+            output_top[count] = current_elt
+            count += 1
+        if count >= size:
+            break
+    return output_top
+
+
+@numba.jit(nopython=True)
+def greedy_mutual_information(
+    items_forbidden,
+    assortment_size,
+    info_measure,
+    prefs,
+    a_star,
+    count_star,
+    thet_star,
+):
+    n_items = prefs.shape[1]
+    n_excluded_0 = items_forbidden.shape[0]
+    action_picked = np.zeros(assortment_size, dtype=np.int64)
+    total_forbidden = -np.ones(n_excluded_0 + assortment_size, dtype=np.int64)
+    total_forbidden[:n_excluded_0] = items_forbidden
+    for current_size in range(1, assortment_size + 1):
+        best_improvement = -np.inf
+        item_added = -1
+        for possible_item in range(n_items):
+            action_picked[current_size - 1] = possible_item
+            if insert_numba(
+                total_forbidden[: (n_excluded_0 + current_size - 1)],
+                possible_item,
+            ):
+                gain = info_measure(
+                    action_picked[:current_size],
+                    prefs,
+                    a_star,
+                    count_star,
+                    thet_star,
+                )
+                if gain > best_improvement:
+                    item_added = possible_item
+                    best_improvement = gain
+        action_picked[current_size - 1] = item_added
+        total_forbidden[current_size - 1 + n_excluded_0] = item_added
     return action_picked
 
 
 @numba.jit(nopython=True)
 def ids_action_selection_approximate(
     g_,
-    actions_set,
+    n_slots,
     sampled_preferences,
     r_star,
     actions_star,
@@ -362,55 +424,57 @@ def ids_action_selection_approximate(
     :param thetas: 1D array of the indices in [0, M-1]
     of the thetas associated w/ each opt action
     """
-    # Shuffling the actions set
-    np.random.shuffle(actions_set)
-    # Quantities to keep track off
-    min_information_ratio = 1e8
-    d1 = 0.0
-    g1 = 0.0
-    ids_action = actions_set[0]
-    n_actions = actions_set.shape[0]
-    for i in range(n_actions):
-        action1 = actions_set[i]
-        g_a1 = g_(
-            action1,
+    # Pseudo code
+    # 1- sort items by decreasing expected preference
+    # 2- for k in range 1..K
+    # pick items [1..k] in terms of pref
+    # run ig_greedy to get items [k+1..K] in the assortment
+    # 3- for k in rang 1..K
+    # pick items [1..k] with ig_greedy
+    # remaining items in terms of pref
+    # optimize combination from those 2K actions
+    # Also add logs to IDS in general
+    expected_preferences = (
+        np.sum(sampled_preferences, 0) / sampled_preferences.shape[0]
+    )
+    item_indexes_decreasing_expected_preferences = np.argsort(
+        -expected_preferences
+    )
+
+    all_actions = np.ones((2 * n_slots, n_slots), dtype=np.int64)
+    for k in range(1, n_slots + 1):
+        items = item_indexes_decreasing_expected_preferences[:k]
+        all_actions[k - 1, :k] = items
+        other_items = greedy_mutual_information(
+            items,
+            n_slots - k,
+            g_,
             sampled_preferences,
             actions_star,
             counts_star,
             thetas_star,
         )
-        delta_1 = delta_full_numba(action1, sampled_preferences, r_star)
-        if not g_a1:
-            value = delta_1
-        else:
-            value = delta_1 ** 2 / g_a1
-        if value < min_information_ratio:
-            min_information_ratio = value
-            d1 = delta_1
-            g1 = g_a1
-            ids_action = action1
-    if not g1:
-        return ids_action
-    else:
-        action1 = ids_action
-        for i in range(n_actions):
-            action2 = actions_set[i]
-            g_a2 = g_(
-                action2,
-                sampled_preferences,
-                actions_star,
-                counts_star,
-                thetas_star,
-            )
-            delta_2 = delta_full_numba(action2, sampled_preferences, r_star)
-            value, rho = optimized_ratio_numba(
-                d1=d1, d2=delta_2, g1=g1, g2=g_a2
-            )
-            action_picked = action1 if np.random.rand() <= rho else action2
-            if value < min_information_ratio:
-                min_information_ratio = value
-                ids_action = action_picked
-    return ids_action
+        all_actions[k - 1, k:] = other_items
+
+    for k in range(1, n_slots + 1):
+        items = greedy_mutual_information(
+            np.empty(shape=0, dtype=np.int64),
+            k,
+            g_,
+            sampled_preferences,
+            actions_star,
+            counts_star,
+            thetas_star,
+        )
+        all_actions[n_slots - 1 + k, :k] = items
+        other_items = numba_top(
+            item_indexes_decreasing_expected_preferences, items, n_slots - k
+        )
+        all_actions[n_slots - 1 + k, k:] = other_items
+
+    return ids_action_selection_numba(
+        g_, all_actions, sampled_preferences, r_star, actions_star, counts_star, thetas_star
+    )
 
 
 class InformationDirectedSampler:
@@ -439,7 +503,7 @@ class InformationDirectedSampler:
 
     def update_r_star(self):
         sorted_beliefs = np.sort(self.posterior_belief, axis=1)[
-            :, -self.assortment_size :
+            :, -self.assortment_size:
         ]  # shape (m, k)
         picking_probabilities = sorted_beliefs.sum(1)
         self.r_star = (

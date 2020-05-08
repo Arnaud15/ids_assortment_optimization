@@ -38,11 +38,9 @@ class EpochSamplingIDS(EpochSamplingAgent):
         print(f"Action selection+{self.action_selection}")
         print(f"scaling factor: {self.scaling_factor}")
         if self.action_selection == "exact":
-            self.all_actions = (
-                np.array(
-                    possible_actions(self.n_items, self.assortment_size),
-                    dtype=int,
-                )
+            self.all_actions = np.array(
+                possible_actions(self.n_items, self.assortment_size),
+                dtype=int,
             )
 
     def proposal(self):
@@ -51,7 +49,7 @@ class EpochSamplingIDS(EpochSamplingAgent):
         )
         self.ids_sampler.update_belief(self.prior_belief)
         if self.action_selection == "exact":
-            action = np.array(
+            action, min_ratio = np.array(
                 ids_action_selection_numba(
                     g_=self.ids_sampler.g_,
                     actions_set=self.all_actions,
@@ -63,10 +61,10 @@ class EpochSamplingIDS(EpochSamplingAgent):
                 )
             )
         elif self.action_selection == "approximate":
-            action = np.array(
+            action, min_ratio = np.array(
                 ids_action_selection_approximate(
                     g_=self.ids_sampler.g_,
-                    actions_set=self.all_actions,
+                    n_slots=self.assortment_size,
                     sampled_preferences=self.prior_belief,
                     r_star=self.ids_sampler.r_star,
                     actions_star=self.ids_sampler.actions_star,
@@ -75,7 +73,7 @@ class EpochSamplingIDS(EpochSamplingAgent):
                 )
             )
         elif self.action_selection == "greedy":
-            action = np.array(
+            action, min_ratio = np.array(
                 greedy_ids_action_selection(
                     g_=self.ids_sampler.g_,
                     scaling_factor=self.scaling_factor,
@@ -89,6 +87,7 @@ class EpochSamplingIDS(EpochSamplingAgent):
         else:
             raise ValueError("Must be one of (exact | approximate | greedy)")
         self.current_action = action
+        self.data_stored['ratios'].append(min_ratio)
         return action
 
 
