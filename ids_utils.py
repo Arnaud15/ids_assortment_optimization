@@ -441,36 +441,19 @@ def ids_action_selection_approximate(
         -expected_preferences
     )
 
-    all_actions = np.ones((2 * n_slots, n_slots), dtype=np.int64)
-    for k in range(1, n_slots + 1):
-        items = item_indexes_decreasing_expected_preferences[:k]
-        all_actions[k - 1, :k] = items
-        other_items = greedy_mutual_information(
-            items,
-            n_slots - k,
-            g_,
-            sampled_preferences,
-            actions_star,
-            counts_star,
-            thetas_star,
-        )
-        all_actions[k - 1, k:] = other_items
-
-    for k in range(1, n_slots + 1):
-        items = greedy_mutual_information(
+    all_actions = np.ones((2, n_slots), dtype=np.int64)
+    mi_action = greedy_mutual_information(
             np.empty(shape=0, dtype=np.int64),
-            k,
+            n_slots,
             g_,
             sampled_preferences,
             actions_star,
             counts_star,
             thetas_star,
         )
-        all_actions[n_slots - 1 + k, :k] = items
-        other_items = numba_top(
-            item_indexes_decreasing_expected_preferences, items, n_slots - k
-        )
-        all_actions[n_slots - 1 + k, k:] = other_items
+    regret_action = item_indexes_decreasing_expected_preferences[:n_slots]
+    all_actions[0] = mi_action
+    all_actions[1] = regret_action
 
     return ids_action_selection_numba(
         g_, all_actions, sampled_preferences, r_star, actions_star, counts_star, thetas_star
