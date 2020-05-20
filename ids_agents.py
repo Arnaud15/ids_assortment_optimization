@@ -49,7 +49,7 @@ class EpochSamplingIDS(EpochSamplingAgent):
         )
         self.ids_sampler.update_belief(self.prior_belief)
         if self.action_selection == "exact":
-            action, min_ratio = np.array(
+            misc = np.array(
                 ids_action_selection_numba(
                     g_=self.ids_sampler.g_,
                     actions_set=self.all_actions,
@@ -61,7 +61,7 @@ class EpochSamplingIDS(EpochSamplingAgent):
                 )
             )
         elif self.action_selection == "approximate":
-            action, min_ratio = np.array(
+            misc = np.array(
                 ids_action_selection_approximate(
                     g_=self.ids_sampler.g_,
                     n_slots=self.assortment_size,
@@ -70,13 +70,27 @@ class EpochSamplingIDS(EpochSamplingAgent):
                     actions_star=self.ids_sampler.actions_star,
                     counts_star=self.ids_sampler.counts_star,
                     thetas_star=self.ids_sampler.thetas_star,
+                    scaling_factor=self.scaling_factor,
                 )
             )
         elif self.action_selection == "greedy":
-            action, min_ratio = np.array(
+            misc = np.array(
                 greedy_ids_action_selection(
-                    g_=self.ids_sampler.g_,
                     scaling_factor=self.scaling_factor,
+                    g_=self.ids_sampler.g_,
+                    sampled_preferences=self.prior_belief,
+                    r_star=self.ids_sampler.r_star,
+                    actions_star=self.ids_sampler.actions_star,
+                    counts_star=self.ids_sampler.counts_star,
+                    thetas_star=self.ids_sampler.thetas_star,
+                )
+            )
+        elif self.action_selection == "greedy2":
+            misc = np.array(
+                greedy_ids_action_selection(
+                    scaling_factor=self.scaling_factor
+                    / (self.current_step ** 0.05),
+                    g_=self.ids_sampler.g_,
                     sampled_preferences=self.prior_belief,
                     r_star=self.ids_sampler.r_star,
                     actions_star=self.ids_sampler.actions_star,
@@ -86,9 +100,9 @@ class EpochSamplingIDS(EpochSamplingAgent):
             )
         else:
             raise ValueError("Must be one of (exact | approximate | greedy)")
-        self.current_action = action
-        self.data_stored['ratios'].append(min_ratio)
-        return action
+        self.current_action = misc[0]
+        self.data_stored["IDS_logs"].append(misc[1:])
+        return misc[0]
 
 
 def best_mixture(delta, gain):

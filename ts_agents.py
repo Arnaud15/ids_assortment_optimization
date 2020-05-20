@@ -26,10 +26,22 @@ class EpochSamplingTS(EpochSamplingAgent):
 
 
 class SparseTS(Agent):
-    def __init__(self, k, n, correlated_sampling, fallback_weight, **kwargs):
+    def __init__(
+        self,
+        k,
+        n,
+        correlated_sampling,
+        fallback_weight,
+        p_optim=None,
+        **kwargs,
+    ):
         super().__init__(k, n)
         self.fallback_weight = fallback_weight
         self.correlated_sampling = correlated_sampling
+        self.optimism_probability = p_optim
+        print(
+            f"Agent with cs={self.correlated_sampling} and p_o={self.optimism_probability}"
+        )
         self.reset()
 
     def reset(self):
@@ -69,7 +81,11 @@ class SparseTS(Agent):
         else:
             # Sample for one item if it is optimal
             # Share this sample for all new items
-            proba_item_is_optimal = self.top_item_posterior_probabilites.max()
+            proba_item_is_optimal = (
+                self.top_item_posterior_probabilites.max()
+                if self.optimism_probability is None
+                else self.optimism_probability
+            )
             optimistic = np.random.rand() <= proba_item_is_optimal
             uncertain_items = self.normal_items_indices[
                 self.top_item_posterior_probabilites[1:] > 0

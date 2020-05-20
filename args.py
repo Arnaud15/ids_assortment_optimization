@@ -95,6 +95,12 @@ def get_experiment_args(run_or_plot):
         default=1,
         help="correlated sampling or no",
     )
+    parser.add_argument(
+        "--optim_prob",
+        type=float,
+        default=None,
+        help="optimism probability for the TSCS sparse agent"
+    )
 
     # Information Directed Sampling PARAMETERS
     parser.add_argument(

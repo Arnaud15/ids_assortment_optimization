@@ -60,8 +60,7 @@ def run_episode(envnmt, actor, n_steps, verbose=False):
     top_item = envnmt.top_item
     rewards = np.zeros(n_steps)
     obs = [0] * n_steps
-    iterator = tqdm(range(n_steps)) if not verbose else range(n_steps)
-    for ix in iterator:
+    for ix in range(n_steps):
         # act / step / update
         assortment = actor.act()
         item_selected = envnmt.step(assortment)
@@ -176,6 +175,21 @@ def get_prior(
         prior = np.zeros(n_items + 1)
         prior[top_item] = np.inf
         prior[0] = fallback_weight
+    elif prior_type == "customer_0":
+        n_groups = 5
+        # TODO make n_groups a proper parameter
+        assert n_items % n_groups == 0
+        high_level_preferences = np.random.exponential(
+            scale=1.0, size=n_groups
+        )
+        high_level_preferences /= (
+            high_level_preferences.sum()
+        )  # unit simplex of size n_groups
+        high_level_preferences = np.repeat(
+            high_level_preferences, n_items // n_groups
+        )
+        prior = np.random.rand(n_items + 1)
+        prior[:n_items] *= high_level_preferences
     else:
         raise ValueError("Choice of 'uniform', 'soft_sparse', 'full_sparse'")
     prior[-1] = 1.0

@@ -40,7 +40,7 @@ class Agent(abc.ABC):
         :return: reward of 1. if any item is selected, 0. otherwise
         """
         return 1.0 if item < self.n_items else 0.0
-    
+
     def stored_info(self):
         return self.data_stored
 
@@ -90,10 +90,10 @@ class EpochSamplingAgent(Agent, abc.ABC):
 
     def act(self):
         if self.epoch_ended:
-            self.data_stored['steps'].append("new")
+            self.data_stored["steps"].append("new")
             action = self.proposal()
         else:
-            self.data_stored['steps'].append("same")
+            self.data_stored["steps"].append("same")
             action = self.current_action
         return action
 
@@ -167,6 +167,7 @@ class EpochSamplingAgent(Agent, abc.ABC):
 
     def reset(self):
         self.epoch_ended = True
+        self.current_step = 1
         self.current_action = self.n_items
         self.epoch_picks = defaultdict(int)
         if PAPER_EXPLORATION_BONUS or PAPER_UNDEFINED_PRIOR:
@@ -183,6 +184,7 @@ class EpochSamplingAgent(Agent, abc.ABC):
         self.data_stored = defaultdict(list)
 
     def update(self, item_selected):
+        self.current_step += 1
         reward = self.perceive_reward(item_selected)
         if item_selected == self.n_items:
             self.epoch_ended = True
