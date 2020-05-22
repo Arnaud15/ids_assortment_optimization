@@ -37,11 +37,11 @@ class EpochSamplingIDS(EpochSamplingAgent):
         self.scaling_factor = scaling_factor
         print(f"Action selection+{self.action_selection}")
         print(f"scaling factor: {self.scaling_factor}")
-        if self.action_selection == "exact":
-            self.all_actions = np.array(
-                possible_actions(self.n_items, self.assortment_size),
-                dtype=int,
-            )
+        # if self.action_selection == "exact":
+        self.all_actions = np.array(
+            possible_actions(self.n_items, self.assortment_size),
+            dtype=int,
+        )
 
     def proposal(self):
         self.prior_belief = self.sample_from_posterior(
@@ -63,14 +63,13 @@ class EpochSamplingIDS(EpochSamplingAgent):
         elif self.action_selection == "approximate":
             misc = np.array(
                 ids_action_selection_approximate(
+                    scaling_factor=self.scaling_factor,
                     g_=self.ids_sampler.g_,
-                    n_slots=self.assortment_size,
                     sampled_preferences=self.prior_belief,
                     r_star=self.ids_sampler.r_star,
                     actions_star=self.ids_sampler.actions_star,
                     counts_star=self.ids_sampler.counts_star,
                     thetas_star=self.ids_sampler.thetas_star,
-                    scaling_factor=self.scaling_factor,
                 )
             )
         elif self.action_selection == "greedy":
@@ -85,6 +84,19 @@ class EpochSamplingIDS(EpochSamplingAgent):
                     thetas_star=self.ids_sampler.thetas_star,
                 )
             )
+            true_min = ids_action_selection_numba(
+                    g_=self.ids_sampler.g_,
+                    actions_set=self.all_actions,
+                    sampled_preferences=self.prior_belief,
+                    r_star=self.ids_sampler.r_star,
+                    actions_star=self.ids_sampler.actions_star,
+                    counts_star=self.ids_sampler.counts_star,
+                    thetas_star=self.ids_sampler.thetas_star,
+                )[1]
+            if misc[1] < (true_min - 1e-3):
+                import ipdb
+                ipdb.set_trace()
+            misc[1] = true_min / misc[1]
         elif self.action_selection == "greedy2":
             misc = np.array(
                 greedy_ids_action_selection(

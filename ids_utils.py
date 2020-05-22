@@ -266,6 +266,9 @@ def ids_action_selection_numba(
 
 @numba.jit(nopython=True)
 def greedy_information_difference(
+    starting_action,
+    available_items,
+    action_size,
     g_,
     thetas,
     actions_star,
@@ -273,20 +276,24 @@ def greedy_information_difference(
     thetas_star,
     r_star,
     scaler,
-    assortment_size,
     n_items,
     mixing,
     d1,
     g1,
 ):
-    ids_action = -np.ones(assortment_size, dtype=np.int64)
-    available_items = np.ones(n_items, dtype=np.int8)
     delta_val = 0.0
     g_val = 0.0
     rho_mixing = -1.0
-    for current_size in range(1, assortment_size + 1):
-        current_action = np.copy(ids_action[:current_size])
+    for current_size in range(1, action_size + 1):
         min_information = 1e12
+        if starting_action[current_size - 1] < 0:
+            # print("building first")
+            starting_action[current_size - 1] = 0
+        else:
+            available_items[starting_action[current_size - 1]] = 1
+        current_action = np.copy(starting_action[starting_action >= 0])
+        # import ipdb;
+        # ipdb.set_trace()
         for item in range(n_items):
             if available_items[item]:
                 current_action[current_size - 1] = item
@@ -301,7 +308,7 @@ def greedy_information_difference(
                     thetas_star,
                 )
                 current_g = current_g if current_g > 1e-12 else 1e-12
-                if mixing > 0.0:
+                if mixing:
                     value, current_rho = optimized_ratio_numba(
                         d1=d1,
                         d2=current_delta,
@@ -317,10 +324,10 @@ def greedy_information_difference(
                     min_information = value
                     delta_val = current_delta
                     g_val = current_g
-                    ids_action[current_size - 1] = item
+                    starting_action[current_size - 1] = item
                     rho_mixing = current_rho
-        available_items[ids_action[current_size - 1]] = 0
-    return ids_action, delta_val, g_val, rho_mixing
+        available_items[starting_action[current_size - 1]] = 0
+    return starting_action, delta_val, g_val, rho_mixing
 
 
 @numba.jit(nopython=True)
@@ -347,7 +354,12 @@ def greedy_ids_action_selection(
     """
     n_items = sampled_preferences.shape[1]
     assortment_size = actions_star.shape[1]
+    ids_action = -np.ones(assortment_size, dtype=np.int64)
+    available_items = np.ones(n_items, dtype=np.int8)
     action_1, d_1, g_1, _ = greedy_information_difference(
+        starting_action=ids_action,
+        available_items=available_items,
+        action_size=assortment_size,
         g_=g_,
         thetas=sampled_preferences,
         actions_star=actions_star,
@@ -355,13 +367,16 @@ def greedy_ids_action_selection(
         thetas_star=thetas_star,
         scaler=scaling_factor,
         r_star=r_star,
-        assortment_size=assortment_size,
         n_items=n_items,
-        mixing=-1.0,
+        mixing=False,
         d1=0.0,
         g1=0.0,
     )
+
     action_2, d_2, g_2, rho_val = greedy_information_difference(
+        starting_action=-np.ones(assortment_size, dtype=np.int64),
+        available_items=np.ones(n_items, dtype=np.int8),
+        action_size=assortment_size,
         g_=g_,
         thetas=sampled_preferences,
         actions_star=actions_star,
@@ -369,9 +384,8 @@ def greedy_ids_action_selection(
         thetas_star=thetas_star,
         scaler=scaling_factor,
         r_star=r_star,
-        assortment_size=assortment_size,
         n_items=n_items,
-        mixing=1.0,
+        mixing=True,
         d1=d_1,
         g1=g_1,
     )
@@ -451,14 +465,13 @@ def greedy_mutual_information(
 
 @numba.jit(nopython=True)
 def ids_action_selection_approximate(
+    scaling_factor,
     g_,
-    n_slots,
     sampled_preferences,
     r_star,
     actions_star,
     counts_star,
     thetas_star,
-    scaling_factor,
 ):
     """
     param: g_ = information_ratio computation function selected
@@ -472,60 +485,59 @@ def ids_action_selection_approximate(
     :param thetas: 1D array of the indices in [0, M-1]
     of the thetas associated w/ each opt action
     """
-    # Pseudo code
-    # 1- sort items by decreasing expected preference
-    # 2- for k in range 1..K
-    # pick items [1..k] in terms of pref
-    # run ig_greedy to get items [k+1..K] in the assortment
-    # 3- for k in rang 1..K
-    # pick items [1..k] with ig_greedy
-    # remaining items in terms of pref
-    # optimize combination from those 2K actions
-    # Also add logs to IDS in general
-    expected_preferences = (
-        np.sum(sampled_preferences, 0) / sampled_preferences.shape[0]
-    )
-    item_indexes_decreasing_expected_preferences = np.argsort(
-        -expected_preferences
-    )
+    N_ITERATIONS = 3
 
-    all_actions = np.ones((3, n_slots), dtype=np.int64)
-    mi_action = greedy_mutual_information(
-        np.empty(shape=0, dtype=np.int64),
-        n_slots,
-        g_,
-        sampled_preferences,
-        actions_star,
-        counts_star,
-        thetas_star,
-    )
-    regret_action = item_indexes_decreasing_expected_preferences[:n_slots]
-    top_action = greedy_information_difference(
+    n_items = sampled_preferences.shape[1]
+    assortment_size = actions_star.shape[1]
+
+    ids_action = -np.ones(assortment_size, dtype=np.int64)
+    available_items = np.ones(n_items, dtype=np.int8)
+    action_1, d_1, g_1, _ = greedy_information_difference(
+        starting_action=ids_action,
+        available_items=available_items,
+        action_size=assortment_size,
         g_=g_,
         thetas=sampled_preferences,
         actions_star=actions_star,
         counts_star=counts_star,
         thetas_star=thetas_star,
-        r_star=r_star,
         scaler=scaling_factor,
-        assortment_size=n_slots,
-        n_items=sampled_preferences.shape[1],
-        mixing=-1.0,
+        r_star=r_star,
+        n_items=n_items,
+        mixing=False,
         d1=0.0,
         g1=0.0,
-    )[0]
-    all_actions[0] = mi_action
-    all_actions[1] = regret_action
-    all_actions[2] = top_action
-
-    return ids_action_selection_numba(
-        g_,
-        all_actions,
-        sampled_preferences,
-        r_star,
-        actions_star,
-        counts_star,
-        thetas_star,
+    )
+        # d_1 - scaling_factor * g_1import ipdb;
+        # ipdb.set_trace()
+    action_2 = -np.ones(assortment_size, dtype=np.int64)
+    available_items = np.ones(n_items, dtype=np.int8)
+    for _ in range(N_ITERATIONS):
+        action_2, d_2, g_2, rho_val = greedy_information_difference(
+            starting_action=action_2,
+            available_items=available_items,
+            action_size=assortment_size,
+            g_=g_,
+            thetas=sampled_preferences,
+            actions_star=actions_star,
+            counts_star=counts_star,
+            thetas_star=thetas_star,
+            scaler=scaling_factor,
+            r_star=r_star,
+            n_items=n_items,
+            mixing=True,
+            d1=d_1,
+            g1=g_1,
+        )
+    ids_action = action_1 if np.random.rand() <= rho_val else action_2
+    return (
+        ids_action,
+        information_ratio_numba(rho=rho_val, d1=d_1, d2=d_2, g1=g_1, g2=g_2),
+        rho_val,
+        g_1,
+        d_1,
+        g_2,
+        d_2,
     )
 
 

@@ -34,6 +34,7 @@ def args_to_exp_id(
         agent_id = agent_name
         if "ids" in agent_id and (not plotting):
             agent_id += args.info_type
+            agent_id += args.ids_action_selection
         elif (
             args.correlated_sampling and ("ts" in agent_id) and (not plotting)
         ):
