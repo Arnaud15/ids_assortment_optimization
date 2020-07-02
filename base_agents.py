@@ -168,7 +168,7 @@ class EpochSamplingAgent(Agent, abc.ABC):
     def reset(self):
         self.epoch_ended = True
         self.current_step = 1
-        self.current_action = self.n_items
+        self.current_action = None
         self.epoch_picks = defaultdict(int)
         if PAPER_EXPLORATION_BONUS or PAPER_UNDEFINED_PRIOR:
             self.posterior_parameters = [(1, 1) for _ in range(self.n_items)]

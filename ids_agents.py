@@ -3,6 +3,8 @@ from ids_utils import (
     ids_action_selection_numba,
     ids_action_selection_approximate,
     greedy_ids_action_selection,
+    information_ratio_numba,
+    delta_full_numba,
 )
 from env import act_optimally, possible_actions
 from base_agents import Agent, EpochSamplingAgent
@@ -14,6 +16,7 @@ class EpochSamplingIDS(EpochSamplingAgent):
         self,
         k,
         n,
+        horizon,
         correlated_sampling,
         limited_prefs,
         n_samples,
@@ -26,22 +29,39 @@ class EpochSamplingIDS(EpochSamplingAgent):
             self,
             k,
             n,
-            horizon=None,
+            horizon=horizon,
             correlated_sampling=False,
             limited_preferences=limited_prefs,
         )
         self.ids_sampler = InformationDirectedSampler(
-            assortment_size=k, info_type=info_type, n_samples=n_samples
+            n_items=n,
+            assortment_size=k,
+            info_type=info_type,
+            n_samples=n_samples,
         )
+        self.fitted_scaler = self.ids_sampler.lambda_algo
         self.action_selection = action_type
-        self.scaling_factor = scaling_factor
         print(f"Action selection+{self.action_selection}")
-        print(f"scaling factor: {self.scaling_factor}")
-        # if self.action_selection == "exact":
-        self.all_actions = np.array(
-            possible_actions(self.n_items, self.assortment_size),
-            dtype=int,
-        )
+        print(f"scaling factor: {self.ids_sampler.lambda_algo}")
+        if self.action_selection == "exact":
+            self.all_actions = np.array(
+                possible_actions(self.n_items, self.assortment_size),
+                dtype=int,
+            )
+
+    # def init_scaling_factor(self):
+    #     N_SAMPLES = 1000
+    #     min_val = 1e12
+    #     # for _ in range(N_SAMPLES):
+    #     #     action = np.random.choice(a=self.n_items, size=self.assortment_size, replace=False)
+    #     #     g_1 = self.ids_sampler.g_(action, sampled_preferences=self.ids_sampler.posterior_belief, actions_star=self.ids_sampler.actions_star, counts=self.ids_sampler.counts_star, thetas=self.ids_sampler.thetas_star)
+    #     #     d_1 = delta_full_numba(action, self.ids_sampler.posterior_belief, self.ids_sampler.r_star)
+    #     #     val = information_ratio_numba(0.5, d_1, d_1, g_1, g_1)
+    #     #     if val < min_val:
+    #     #         min_val = val
+    #     # self.scaling_factor = min_val
+    #     self.scaling_factor = 0.1
+    #     print(f"init scaling_factor is {self.scaling_factor}")
 
     def proposal(self):
         self.prior_belief = self.sample_from_posterior(
@@ -61,9 +81,18 @@ class EpochSamplingIDS(EpochSamplingAgent):
                 )
             )
         elif self.action_selection == "approximate":
+            # true_min = ids_action_selection_numba(
+            #     g_=self.ids_sampler.g_,
+            #     actions_set=self.all_actions,
+            #     sampled_preferences=self.prior_belief,
+            #     r_star=self.ids_sampler.r_star,
+            #     actions_star=self.ids_sampler.actions_star,
+            #     counts_star=self.ids_sampler.counts_star,
+            #     thetas_star=self.ids_sampler.thetas_star,
+            # )[1]
             misc = np.array(
                 ids_action_selection_approximate(
-                    scaling_factor=self.scaling_factor,
+                    scaling_factor=self.ids_sampler.lambda_algo,
                     g_=self.ids_sampler.g_,
                     sampled_preferences=self.prior_belief,
                     r_star=self.ids_sampler.r_star,
@@ -72,10 +101,25 @@ class EpochSamplingIDS(EpochSamplingAgent):
                     thetas_star=self.ids_sampler.thetas_star,
                 )
             )
+            # if misc[1] < (true_min - 1e-3):
+            #     import ipdb
+
+            #     ipdb.set_trace()
+            # misc[1] = true_min / misc[1]
         elif self.action_selection == "greedy":
+            # true_min = ids_action_selection_numba(
+            #     g_=self.ids_sampler.g_,
+            #     actions_set=self.all_actions,
+            #     sampled_preferences=self.prior_belief,
+            #     r_star=self.ids_sampler.r_star,
+            #     actions_star=self.ids_sampler.actions_star,
+            #     counts_star=self.ids_sampler.counts_star,
+            #     thetas_star=self.ids_sampler.thetas_star,
+            # )[1]
             misc = np.array(
                 greedy_ids_action_selection(
-                    scaling_factor=self.scaling_factor,
+                    scaling_factor=(self.T - self.current_step)
+                    * self.ids_sampler.lambda_algo,
                     g_=self.ids_sampler.g_,
                     sampled_preferences=self.prior_belief,
                     r_star=self.ids_sampler.r_star,
@@ -84,24 +128,15 @@ class EpochSamplingIDS(EpochSamplingAgent):
                     thetas_star=self.ids_sampler.thetas_star,
                 )
             )
-            true_min = ids_action_selection_numba(
-                    g_=self.ids_sampler.g_,
-                    actions_set=self.all_actions,
-                    sampled_preferences=self.prior_belief,
-                    r_star=self.ids_sampler.r_star,
-                    actions_star=self.ids_sampler.actions_star,
-                    counts_star=self.ids_sampler.counts_star,
-                    thetas_star=self.ids_sampler.thetas_star,
-                )[1]
-            if misc[1] < (true_min - 1e-3):
-                import ipdb
-                ipdb.set_trace()
-            misc[1] = true_min / misc[1]
+            # if misc[1] < (true_min - 1e-3):
+            #     import ipdb
+
+            #     ipdb.set_trace()
+            # misc[1] = true_min / misc[1]
         elif self.action_selection == "greedy2":
             misc = np.array(
                 greedy_ids_action_selection(
-                    scaling_factor=self.scaling_factor
-                    / (self.current_step ** 0.05),
+                    scaling_factor=self.fitted_scaler,
                     g_=self.ids_sampler.g_,
                     sampled_preferences=self.prior_belief,
                     r_star=self.ids_sampler.r_star,
@@ -112,7 +147,9 @@ class EpochSamplingIDS(EpochSamplingAgent):
             )
         else:
             raise ValueError("Must be one of (exact | approximate | greedy)")
+
         self.current_action = misc[0]
+        self.fitted_scaler = misc[1]
         self.data_stored["IDS_logs"].append(misc[1:])
         return misc[0]
 

@@ -99,7 +99,7 @@ def get_experiment_args(run_or_plot):
         "--optim_prob",
         type=float,
         default=None,
-        help="optimism probability for the TSCS sparse agent"
+        help="optimism probability for the TSCS sparse agent",
     )
 
     # Information Directed Sampling PARAMETERS

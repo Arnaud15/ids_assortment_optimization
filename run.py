@@ -110,6 +110,7 @@ if __name__ == "__main__":
     agent = agent_class(
         k=args.k,
         n=args.n,
+        horizon=args.horizon,
         correlated_sampling=args.correlated_sampling,
         fallback_weight=fallback_item_weight,
         fallback_proba=args.p,
