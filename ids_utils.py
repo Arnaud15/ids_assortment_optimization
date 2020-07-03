@@ -218,7 +218,6 @@ def optimized_ratio_numba(d1, d2, g1, g2, scaler=0.0):
             min_ = val
     return min_, rho_min
 
-
 @numba.jit(nopython=True)
 def ids_action_selection_numba(
     g_,
@@ -359,6 +358,56 @@ def greedy_information_difference(
         available_items[starting_action[current_size - 1]] = 0
     return starting_action, delta_val, g_val, rho_mixing
 
+@numba.jit(nopython=True)
+def greedy_regret_minimization(
+    starting_action,
+    available_items,
+    action_size,
+    g_,
+    thetas,
+    actions_star,
+    counts_star,
+    thetas_star,
+    r_star,
+    entropy,
+    lambda_cst,
+    time_left,
+    n_items,
+    d1,
+    g1,
+):
+    delta_val = 0.0
+    g_val = 0.0
+    for current_size in range(1, action_size + 1):
+        min_information = 1e12
+        if starting_action[current_size - 1] < 0:
+            starting_action[current_size - 1] = 0
+        else:
+            available_items[starting_action[current_size - 1]] = 1
+        current_action = np.copy(starting_action[starting_action >= 0])
+        for item in range(n_items):
+            if available_items[item]:
+                current_action[current_size - 1] = item
+                current_delta = delta_full_numba(
+                    current_action, thetas, r_star
+                )
+                current_g = g_(
+                    current_action,
+                    thetas,
+                    actions_star,
+                    counts_star,
+                    thetas_star,
+                )
+                current_g = current_g if current_g > 1e-12 else 1e-12
+                value = current_delta + np.sqrt(lambda_cst * (entropy - current_g) * time_left)
+                value += np.random.rand() * 1e-12  # adding random noise
+                if value < min_information:
+                    min_information = value
+                    delta_val = current_delta
+                    g_val = current_g
+                    starting_action[current_size - 1] = item
+        available_items[starting_action[current_size - 1]] = 0
+    return starting_action, delta_val, g_val
 
 @numba.jit(nopython=True)
 def greedy_ids_action_selection(
@@ -502,92 +551,11 @@ def to_key(arr):
         ix += 1
     return total
 
-
-@numba.jit(nopython=True)
-def best_increment_action(
-    current_action,
-    current_size,
-    available_items,
-    n_items,
-    rho_val,
-    g_other,
-    d_other,
-    action1_considered,
-    current_pick,
-    current_best_increment,
-    delta_val,
-    g_val,
-    new_item,
-    g_,
-    sampled_preferences,
-    r_star,
-    actions_star,
-    counts_star,
-    thetas_star,
-    scaling_factor,
-    memoizer,
-):
-    for item in range(n_items):
-        if available_items[item]:
-
-            current_action[current_size] = item
-
-            action_key = to_key(current_action)
-            if action_key in memoizer:
-                current_g = memoizer[action_key]
-            else:
-                current_g = g_(
-                    current_action,
-                    sampled_preferences,
-                    actions_star,
-                    counts_star,
-                    thetas_star,
-                )
-                memoizer[action_key] = current_g
-
-            current_d = delta_full_numba(
-                current_action, sampled_preferences, r_star
-            )
-
-            current_g = current_g if current_g > 1e-12 else 1e-12
-            value = (
-                information_difference(
-                    rho_val,
-                    current_d,
-                    d_other,
-                    current_g,
-                    g_other,
-                    eta=scaling_factor,
-                )
-                if action1_considered
-                else information_difference(
-                    rho_val,
-                    d_other,
-                    current_d,
-                    g_other,
-                    current_g,
-                    eta=scaling_factor,
-                )
-            )
-            value += np.random.rand() * 1e-12  # adding random noise
-            if value < current_best_increment:
-                current_best_increment = value
-                delta_val = current_d
-                g_val = current_g
-                new_item = item
-                current_pick = 1 if action1_considered else 2
-    return (
-        current_pick,
-        current_best_increment,
-        delta_val,
-        g_val,
-        new_item,
-    )
-
-
 @numba.jit(nopython=True)
 def ids_action_selection_approximate(
-    scaling_factor,
+    entropy,
+    lambda_cst,
+    time_left,
     g_,
     sampled_preferences,
     r_star,
@@ -609,157 +577,34 @@ def ids_action_selection_approximate(
     """
     n_items = sampled_preferences.shape[1]
     assortment_size = actions_star.shape[1]
-
-    min_info_diff = 1e12
-    rho_mix = -1.0
-    action_1_retained = -np.ones(assortment_size, dtype=np.int64)
-    action_2_retained = -np.ones(assortment_size, dtype=np.int64)
-    delta_1_retained = r_star
-    delta_2_retained = r_star
-    g_1_retained = 0.0
-    g_2_retained = 0.0
-
-    memoizer = numba.typed.Dict()
-    memoizer[-1] = 0.5
-
-    for rho_val in RHO_VALUES:
-        action_1 = -np.ones(assortment_size, dtype=np.int64)
-        action_2 = -np.ones(assortment_size, dtype=np.int64)
-
-        available_items_1 = np.ones(n_items, dtype=np.int8)
-        available_items_2 = np.ones(n_items, dtype=np.int8)
-
-        current_size_1 = 0
-        current_size_2 = 0
-
-        delta_1 = r_star
-        delta_2 = r_star
-        g_1 = 0.0
-        g_2 = 0.0
-
-        min_ratio_rho = 1e12
-        while (current_size_1 < assortment_size) or (
-            current_size_2 < assortment_size
-        ):
-            # import ipdb
-            # ipdb.set_trace()
-            min_ratio_step = 1e12
-            delta_val = 0.0
-            g_val = 0.0
-            pick = 0
-            new_item = -1
-            # First we try to increment action 1
-            if current_size_1 < assortment_size:
-                (
-                    pick,
-                    min_ratio_step,
-                    delta_val,
-                    g_val,
-                    new_item,
-                ) = best_increment_action(
-                    current_action=action_1[: (current_size_1 + 1)],
-                    current_size=current_size_1,
-                    available_items=available_items_1,
-                    n_items=n_items,
-                    rho_val=rho_val,
-                    g_other=g_2,
-                    d_other=delta_2,
-                    action1_considered=True,
-                    current_pick=pick,
-                    current_best_increment=min_ratio_step,
-                    delta_val=delta_val,
-                    g_val=g_val,
-                    new_item=new_item,
-                    g_=g_,
-                    sampled_preferences=sampled_preferences,
-                    r_star=r_star,
-                    actions_star=actions_star,
-                    counts_star=counts_star,
-                    thetas_star=thetas_star,
-                    scaling_factor=scaling_factor,
-                    memoizer=memoizer,
-                )
-
-            # Second we try to increment action 2
-            if current_size_2 < assortment_size:
-                (
-                    pick,
-                    min_ratio_step,
-                    delta_val,
-                    g_val,
-                    new_item,
-                ) = best_increment_action(
-                    current_action=action_2[: (current_size_2 + 1)],
-                    current_size=current_size_2,
-                    available_items=available_items_2,
-                    n_items=n_items,
-                    rho_val=rho_val,
-                    g_other=g_1,
-                    d_other=delta_1,
-                    action1_considered=False,
-                    current_pick=pick,
-                    current_best_increment=min_ratio_step,
-                    delta_val=delta_val,
-                    g_val=g_val,
-                    new_item=new_item,
-                    sampled_preferences=sampled_preferences,
-                    g_=g_,
-                    r_star=r_star,
-                    actions_star=actions_star,
-                    counts_star=counts_star,
-                    thetas_star=thetas_star,
-                    scaling_factor=scaling_factor,
-                    memoizer=memoizer,
-                )
-
-            # We keep the best increment
-            if pick == 1:
-                delta_1 = delta_val
-                g_1 = g_val
-                current_size_1 += 1
-                action_1[current_size_1 - 1] = new_item
-                available_items_1[action_1[current_size_1 - 1]] = 0
-            elif pick == 2:
-                delta_2 = delta_val
-                g_2 = g_val
-                current_size_2 += 1
-                action_2[current_size_2 - 1] = new_item
-                available_items_2[action_2[current_size_2 - 1]] = 0
-            else:
-                print("errorrrrrrr")
-
-            min_ratio_rho = min_ratio_step
-
-        if min_ratio_rho < min_info_diff:
-            min_info_diff = min_ratio_rho
-            rho_mix = rho_val
-            action_1_retained = np.copy(action_1)
-            action_2_retained = np.copy(action_2)
-            g_1_retained = g_1
-            g_2_retained = g_2
-            delta_1_retained = delta_1
-            delta_2_retained = delta_2
-        # print(min_info_diff)
-
-    ids_action = (
-        action_1_retained if np.random.rand() <= rho_mix else action_2_retained
+    ids_action = -np.ones(assortment_size, dtype=np.int64)
+    available_items = np.ones(n_items, dtype=np.int8)
+    action_1, d_1, g_1 = greedy_regret_minimization(
+        starting_action=ids_action,
+        available_items=available_items,
+        action_size=assortment_size,
+        g_=g_,
+        thetas=sampled_preferences,
+        actions_star=actions_star,
+        counts_star=counts_star,
+        thetas_star=thetas_star,
+        entropy=entropy,
+        time_left=time_left,
+        lambda_cst=lambda_cst,
+        r_star=r_star,
+        n_items=n_items,
+        d1=0.0,
+        g1=0.0,
     )
     return (
-        ids_action,
-        information_ratio_numba(
-            rho=rho_mix,
-            d1=delta_1_retained,
-            d2=delta_2_retained,
-            g1=g_1_retained,
-            g2=g_2_retained,
-        ),
-        rho_mix,
-        g_1_retained,
-        delta_1_retained,
-        g_2_retained,
-        delta_2_retained,
+        action_1,
+        d_1 ** 2 / g_1 if g_1 > 1e-10 else 0.0,
+        0.5,
+        g_1,
+        d_1,
+        g_1,
+        d_1,
     )
-
 
 class InformationDirectedSampler:
     def __init__(self, n_items, assortment_size, n_samples, info_type):
@@ -772,6 +617,7 @@ class InformationDirectedSampler:
 
     def init_sampler(self):
         self.posterior_belief = np.random.rand(self.n_samples, self.n_items)
+        self.max_ir = 0.2
         self.optimal_actions = None
         self.actions_star = None
         self.a_star_entropy = 0.0
@@ -788,6 +634,7 @@ class InformationDirectedSampler:
             raise ValueError("Choice of (gain | variance | gain_theta)")
         self.r_star = 0.0
         self.update_belief(self.posterior_belief)
+        self.lambda_min = 1.0
 
     def update_r_star(self):
         sorted_beliefs = np.sort(self.posterior_belief, axis=1)[
@@ -858,7 +705,23 @@ class InformationDirectedSampler:
         self.posterior_belief = new_belief
         self.update_r_star()
         self.update_optimal_actions()
-        if self.a_star_entropy < 1e-10:
+        if self.a_star_entropy < 1e-12:
             self.lambda_algo = 0.0
         else:
             self.lambda_algo = self.delta_min / self.a_star_entropy
+    
+    def update_lambda(self):
+        min_val = 1e12
+        for _ in range(10):
+            a1 = np.random.choice(a=self.n_items, size=self.assortment_size, replace=False)
+            a2 = np.random.choice(a=self.n_items, size=self.assortment_size, replace=False)
+            g_1 = self.g_(a1, sampled_preferences=self.posterior_belief, actions_star=self.actions_star, counts=self.counts_star, thetas=self.thetas_star)
+            g_1 = max(g_1, 1e-12)
+            g_2 = self.g_(a2, sampled_preferences=self.posterior_belief, actions_star=self.actions_star, counts=self.counts_star, thetas=self.thetas_star)
+            g_2 = max(g_2, 1e-12)
+            d_1 = delta_full_numba(a1, self.posterior_belief, self.r_star)
+            d_2 = delta_full_numba(a2, self.posterior_belief, self.r_star)
+            val = optimized_ratio_numba(d_1, d_2, g_1, g_2)[0]
+            if val < min_val:
+                min_val = val
+        self.lambda_min = min_val

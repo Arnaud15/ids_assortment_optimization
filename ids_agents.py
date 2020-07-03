@@ -90,9 +90,10 @@ class EpochSamplingIDS(EpochSamplingAgent):
             #     counts_star=self.ids_sampler.counts_star,
             #     thetas_star=self.ids_sampler.thetas_star,
             # )[1]
+            self.ids_sampler.update_lambda()
             misc = np.array(
-                ids_action_selection_approximate(
-                    scaling_factor=self.ids_sampler.lambda_algo,
+                greedy_ids_action_selection(
+                    scaling_factor=self.ids_sampler.lambda_min,
                     g_=self.ids_sampler.g_,
                     sampled_preferences=self.prior_belief,
                     r_star=self.ids_sampler.r_star,
@@ -136,7 +137,7 @@ class EpochSamplingIDS(EpochSamplingAgent):
         elif self.action_selection == "greedy2":
             misc = np.array(
                 greedy_ids_action_selection(
-                    scaling_factor=self.fitted_scaler,
+                    scaling_factor=self.ids_sampler.max_ir,
                     g_=self.ids_sampler.g_,
                     sampled_preferences=self.prior_belief,
                     r_star=self.ids_sampler.r_star,
@@ -150,6 +151,7 @@ class EpochSamplingIDS(EpochSamplingAgent):
 
         self.current_action = misc[0]
         self.fitted_scaler = misc[1]
+        self.ids_sampler.max_ir = max(self.ids_sampler.max_ir, misc[1])
         self.data_stored["IDS_logs"].append(misc[1:])
         return misc[0]
 
