@@ -218,6 +218,7 @@ def optimized_ratio_numba(d1, d2, g1, g2, scaler=0.0):
             min_ = val
     return min_, rho_min
 
+
 @numba.jit(nopython=True)
 def ids_action_selection_numba(
     g_,
@@ -358,6 +359,7 @@ def greedy_information_difference(
         available_items[starting_action[current_size - 1]] = 0
     return starting_action, delta_val, g_val, rho_mixing
 
+
 @numba.jit(nopython=True)
 def greedy_regret_minimization(
     starting_action,
@@ -399,7 +401,9 @@ def greedy_regret_minimization(
                     thetas_star,
                 )
                 current_g = current_g if current_g > 1e-12 else 1e-12
-                value = current_delta + np.sqrt(lambda_cst * (entropy - current_g) * time_left)
+                value = current_delta + np.sqrt(
+                    lambda_cst * (entropy - current_g) * time_left
+                )
                 value += np.random.rand() * 1e-12  # adding random noise
                 if value < min_information:
                     min_information = value
@@ -408,6 +412,7 @@ def greedy_regret_minimization(
                     starting_action[current_size - 1] = item
         available_items[starting_action[current_size - 1]] = 0
     return starting_action, delta_val, g_val
+
 
 @numba.jit(nopython=True)
 def greedy_ids_action_selection(
@@ -551,6 +556,7 @@ def to_key(arr):
         ix += 1
     return total
 
+
 @numba.jit(nopython=True)
 def ids_action_selection_approximate(
     entropy,
@@ -605,6 +611,7 @@ def ids_action_selection_approximate(
         g_1,
         d_1,
     )
+
 
 class InformationDirectedSampler:
     def __init__(self, n_items, assortment_size, n_samples, info_type):
@@ -709,15 +716,31 @@ class InformationDirectedSampler:
             self.lambda_algo = 0.0
         else:
             self.lambda_algo = self.delta_min / self.a_star_entropy
-    
+
     def update_lambda(self):
         min_val = 1e12
         for _ in range(10):
-            a1 = np.random.choice(a=self.n_items, size=self.assortment_size, replace=False)
-            a2 = np.random.choice(a=self.n_items, size=self.assortment_size, replace=False)
-            g_1 = self.g_(a1, sampled_preferences=self.posterior_belief, actions_star=self.actions_star, counts=self.counts_star, thetas=self.thetas_star)
+            a1 = np.random.choice(
+                a=self.n_items, size=self.assortment_size, replace=False
+            )
+            a2 = np.random.choice(
+                a=self.n_items, size=self.assortment_size, replace=False
+            )
+            g_1 = self.g_(
+                a1,
+                sampled_preferences=self.posterior_belief,
+                actions_star=self.actions_star,
+                counts=self.counts_star,
+                thetas=self.thetas_star,
+            )
             g_1 = max(g_1, 1e-12)
-            g_2 = self.g_(a2, sampled_preferences=self.posterior_belief, actions_star=self.actions_star, counts=self.counts_star, thetas=self.thetas_star)
+            g_2 = self.g_(
+                a2,
+                sampled_preferences=self.posterior_belief,
+                actions_star=self.actions_star,
+                counts=self.counts_star,
+                thetas=self.thetas_star,
+            )
             g_2 = max(g_2, 1e-12)
             d_1 = delta_full_numba(a1, self.posterior_belief, self.r_star)
             d_2 = delta_full_numba(a2, self.posterior_belief, self.r_star)

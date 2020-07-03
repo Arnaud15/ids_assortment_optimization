@@ -68,6 +68,8 @@ class EpochSamplingIDS(EpochSamplingAgent):
             self.ids_sampler.n_samples
         )
         self.ids_sampler.update_belief(self.prior_belief)
+        misc = None
+        approximate_action = None
         if self.action_selection == "exact":
             misc = np.array(
                 ids_action_selection_numba(
@@ -81,27 +83,31 @@ class EpochSamplingIDS(EpochSamplingAgent):
                 )
             )
         elif self.action_selection == "approximate":
-            # true_min = ids_action_selection_numba(
-            #     g_=self.ids_sampler.g_,
-            #     actions_set=self.all_actions,
-            #     sampled_preferences=self.prior_belief,
-            #     r_star=self.ids_sampler.r_star,
-            #     actions_star=self.ids_sampler.actions_star,
-            #     counts_star=self.ids_sampler.counts_star,
-            #     thetas_star=self.ids_sampler.thetas_star,
-            # )[1]
-            self.ids_sampler.update_lambda()
-            misc = np.array(
-                greedy_ids_action_selection(
-                    scaling_factor=self.ids_sampler.lambda_min,
-                    g_=self.ids_sampler.g_,
-                    sampled_preferences=self.prior_belief,
-                    r_star=self.ids_sampler.r_star,
-                    actions_star=self.ids_sampler.actions_star,
-                    counts_star=self.ids_sampler.counts_star,
-                    thetas_star=self.ids_sampler.thetas_star,
+            if np.sqrt(self.ids_sampler.delta_min) < 1e-4:
+                posterior_belief = self.prior_belief[
+                    np.random.randint(self.prior_belief.shape[0]), :
+                ]
+                approximate_action = act_optimally(
+                    np.squeeze(posterior_belief), top_k=self.assortment_size
                 )
-            )
+                if not self.data_stored["switched"]:
+                    self.data_stored["switched"] = [self.current_step]
+                elif self.data_stored["switched"][-1] == 0:
+                    self.data_stored["switched"][-1] = self.current_step
+            else:
+                misc = np.array(
+                    greedy_ids_action_selection(
+                        scaling_factor=self.fitted_scaler,
+                        g_=self.ids_sampler.g_,
+                        sampled_preferences=self.prior_belief,
+                        r_star=self.ids_sampler.r_star,
+                        actions_star=self.ids_sampler.actions_star,
+                        counts_star=self.ids_sampler.counts_star,
+                        thetas_star=self.ids_sampler.thetas_star,
+                    )
+                )
+                if not self.data_stored["switched"]:
+                    self.data_stored["switched"].append(0)
             # if misc[1] < (true_min - 1e-3):
             #     import ipdb
 
@@ -148,12 +154,25 @@ class EpochSamplingIDS(EpochSamplingAgent):
             )
         else:
             raise ValueError("Must be one of (exact | approximate | greedy)")
-
-        self.current_action = misc[0]
-        self.fitted_scaler = misc[1]
-        self.ids_sampler.max_ir = max(self.ids_sampler.max_ir, misc[1])
-        self.data_stored["IDS_logs"].append(misc[1:])
-        return misc[0]
+        if misc is not None:
+            self.current_action = misc[0]
+            self.fitted_scaler = misc[1]
+            misc = np.concatenate(
+                [
+                    misc,
+                    np.array(
+                        [
+                            self.ids_sampler.a_star_entropy,
+                            self.ids_sampler.delta_min,
+                        ]
+                    ),
+                ]
+            )
+            self.data_stored["IDS_logs"].append(misc[1:])
+            return misc[0]
+        else:
+            assert approximate_action is not None
+            return approximate_action
 
 
 def best_mixture(delta, gain):
