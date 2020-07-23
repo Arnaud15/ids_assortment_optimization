@@ -114,7 +114,6 @@ if __name__ == "__main__":
         correlated_sampling=args.correlated_sampling,
         fallback_weight=fallback_item_weight,
         fallback_proba=args.p,
-        horizon=args.horizon,
         limited_prefs=True if args.prior == "soft_sparse" else False,
         n_samples=args.ids_samples,
         info_type=args.info_type,

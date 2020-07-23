@@ -618,6 +618,8 @@ class InformationDirectedSampler:
         self.n_items = n_items
         self.assortment_size = assortment_size
         self.n_samples = n_samples
+        self.max_entropy = assortment_size * np.log(n_items / assortment_size)
+        self.max_s_entropy = np.log(n_samples)
         self.info_type = info_type
         self.n_possible_actions = binom(n_items, assortment_size)
         self.init_sampler()
@@ -703,6 +705,9 @@ class InformationDirectedSampler:
                 for (action, (p, _)) in self.optimal_actions.items()
                 if p > 0.0
             ]
+        )
+        self.a_star_entropy = (
+            self.max_entropy * self.a_star_entropy / self.max_s_entropy
         )
         # print(
         #     f"Updated entropy of the optimal action distribution is {self.a_star_entropy:.2f} which is {self.a_star_entropy / np.log(self.n_possible_actions):.2f} percent of total randomness."
