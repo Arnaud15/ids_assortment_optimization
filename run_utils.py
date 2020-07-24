@@ -207,14 +207,19 @@ def aggregate(file_root):
 
 
 def plot_results(file_root, key_to_plot):
-    exp_title, truncated_label = file_root.split('_')[:-1], file_root.split('_')[-1]
-    exp_title = ' '.join(exp_title)
+    exp_title, truncated_label = (
+        file_root.split("_")[:-1],
+        file_root.split("_")[-1],
+    )
+    exp_title = " ".join(exp_title)
     data_loaded = load_experiment_data(file_root, target="agg_folder")
     if key_to_plot in data_loaded:
         y_data = data_loaded[key_to_plot][0]
         x_data = np.arange(1, y_data.shape[0] + 1)
         errors = (
-            1.96 * data_loaded[key_to_plot][1] / np.sqrt(data_loaded[key_to_plot][2])
+            1.96
+            * data_loaded[key_to_plot][1]
+            / np.sqrt(data_loaded[key_to_plot][2])
         )
         plt.plot(x_data, y_data, label=truncated_label)
         plt.fill_between(

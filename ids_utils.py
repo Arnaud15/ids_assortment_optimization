@@ -200,11 +200,138 @@ def vids_epoch(action, sampled_preferences, actions_star, counts, thetas):
 
 
 @numba.jit(nopython=True)
+def info_gain_epoch(action, sampled_preferences, actions_star, counts, thetas):
+    """
+    :param action: 1D array of size (K,) with the indices of the current action
+    :param sampled_preferences: sampled posterior thetas of shape (M, N)
+    :param actions_star: 2D array of shape (n_top_actions, assortment_size)
+    :param counts: 1D array of shape (n_top_actions,)
+     = how many theta for each opt action
+    :param thetas: 1D array of indices in [0, M-1]
+    of the thetas associated w/ each opt action
+    :return:
+    """
+    g_a = 0.0
+    probs = 0.0
+    M = sampled_preferences.shape[0]
+    K = action.shape[0]
+    n_actions_star = actions_star.shape[0]
+
+    probas_given_action = np.zeros(
+        (M, K)
+    )  # Probabilities of each item given action
+    no_pick_given_action = np.zeros((M,))  # Same for no pick given action
+    p_no_item_action = 0.0
+    for m in range(M):
+        sum_row = 0.0
+        for k in range(K):
+            val = sampled_preferences[m, action[k]]
+            probas_given_action[m, k] = val
+            sum_row += val
+        probas_given_action[m, :] = probas_given_action[m, :] / (1 + sum_row)
+        no_pick_given_action[m] = 1 - (sum_row / (1 + sum_row))
+        p_no_item_action += no_pick_given_action[m]
+    p_no_item_action = p_no_item_action / M
+
+    probs += p_no_item_action
+    theta_start = 0
+    for i in range(
+        n_actions_star
+    ):  # First we treat separately the y=NO_ITEM case
+        theta_indices = thetas[theta_start : theta_start + counts[i]]
+        theta_start += counts[i]
+        p_star = counts[i] / M
+        p_no_item_a_star_action = 0.0
+        for theta_indice in theta_indices:
+            p_no_item_a_star_action += no_pick_given_action[theta_indice]
+        p_no_item_a_star_action = p_no_item_a_star_action / M
+        g_a += p_no_item_a_star_action * math.log(
+            p_no_item_a_star_action / (p_star * p_no_item_action)
+        )
+
+    for ix in range(K):  # Now other y s are examined
+        p_item_action = probas_given_action[:, ix].mean()
+        if p_item_action > 1e-12:
+            probs += p_item_action
+            theta_start = 0
+            for j in range(n_actions_star):
+                p_star = counts[j] / M
+                p_item_a_star_action = 0.0
+                theta_indices = thetas[theta_start : theta_start + counts[j]]
+                for theta_indice in theta_indices:
+                    p_item_a_star_action += probas_given_action[
+                        theta_indice, ix
+                    ]
+                theta_start += counts[j]
+                p_item_a_star_action /= M
+                if p_item_a_star_action:
+                    g_a += p_item_a_star_action * math.log(
+                        p_item_a_star_action / (p_star * p_item_action)
+                    )
+    if (probs < 1 - 1e-12) or (probs > 1 + 1e-12):
+        raise ValueError("Problem in IDS with probabilities not summing to 1")
+    return g_a
+
+
+@numba.jit(nopython=True)
 def delta_epoch(action, sampled_preferences, r_star):
     x = r_star - numba_expected_reward(
         action=action, pref=sampled_preferences, mode="epoch"
     )
     return x
+
+
+@numba.jit(nopython=True)
+def rewards_table(sampled_preferences):
+    M = sampled_preferences.shape[0]
+    N = sampled_preferences.shape[1]
+    result = np.zeros((N,), dtype=np.float64)
+    for n in range(N):
+        result[n] = sampled_preferences[:, n].mean()
+    return result
+
+
+@numba.jit(nopython=True)
+def gains_table(L, sampled_preferences, actions_star, counts, thetas):
+    N = sampled_preferences.shape[1]
+    M = sampled_preferences.shape[0]
+    A = actions_star.shape[0]
+    g_table_base = np.zeros((N, M, L), dtype=np.float64)
+    for item_ix in range(N):
+        for theta_ix in range(M):
+            geom_params_item = 1.0 / (
+                sampled_preferences[theta_ix, item_ix] + 1.0
+            )
+            proba = geom_params_item
+            sum_probs = 0.0
+            for n_picks in range(L):
+                g_table_base[item_ix, theta_ix, n_picks] = proba
+                sum_probs += proba
+                proba *= 1 - geom_params_item
+    g_table = np.zeros((N,), dtype=np.float64)
+    for item_ix in range(N):
+        g_item = 0.0
+        p_picks = np.zeros((L,), dtype=np.float64)
+        for l in range(L):
+            p_picks[l] = g_table_base[item_ix, :, l].mean()
+        theta_start = 0
+        for action_star_ix in range(A):
+            p_star = counts[action_star_ix] / M
+            p_a_star_picks = np.zeros((L,), dtype=np.float64)
+            theta_indices = thetas[
+                theta_start : theta_start + counts[action_star_ix]
+            ]
+            for theta_indice in theta_indices:
+                p_a_star_picks += g_table_base[item_ix, theta_indice, :]
+            theta_start += counts[action_star_ix]
+            p_a_star_picks /= counts[action_star_ix]
+            g_item += (
+                p_star
+                * p_a_star_picks
+                * np.log((p_a_star_picks + 1e-12) / (p_picks + 1e-12))
+            ).sum()
+        g_table[item_ix] = g_item
+    return g_table
 
 
 @numba.jit(nopython=True)
@@ -510,14 +637,17 @@ class InformationDirectedSampler:
             :, -self.assortment_size :
         ]  # shape (m, k)
         picking_probabilities = sorted_beliefs.sum(1)
-        self.r_star = (
-            picking_probabilities / (1 + picking_probabilities)
-        ).mean()
+        if self.dynamics == "epoch":
+            self.r_star = picking_probabilities.mean()
+        else:
+            self.r_star = (
+                picking_probabilities / (1 + picking_probabilities)
+            ).mean()
         a_greedy = act_optimally(
             self.posterior_belief.mean(0), self.assortment_size
         )
         greedy_expected_reward = numba_expected_reward(
-            self.posterior_belief, a_greedy, mode="step"
+            self.posterior_belief, a_greedy, mode=self.dynamics
         )
         self.delta_min = self.r_star - greedy_expected_reward
         assert self.delta_min > -1e-12, (
@@ -526,8 +656,6 @@ class InformationDirectedSampler:
             greedy_expected_reward,
         )
         self.delta_min = max(1e-12, self.delta_min)
-        if self.dynamics == "epoch":
-            self.r_star = picking_probabilities.mean()
         # print(
         #     f"r_star = {self.r_star:.2f}, greedy action expected reward = {greedy_expected_reward:.2f}, delta min = {self.delta_min:.2f}"
         # )
@@ -578,10 +706,22 @@ class InformationDirectedSampler:
         #     f"Updated entropy of the optimal action distribution is {self.a_star_entropy:.2f} which is {self.a_star_entropy / np.log(self.n_possible_actions):.2f} percent of total randomness."
         # )
 
+    def update_tables(self):
+        # if self.dynamics == "epoch" and self.info_type == "gain"
+        self.gs_table = gains_table(
+            self.assortment_size,
+            self.posterior_belief,
+            self.actions_star,
+            self.counts_star,
+            self.thetas_star,
+        )
+        self.rews_table = rewards_table(self.posterior_belief)
+
     def update_belief(self, new_belief):
         self.posterior_belief = new_belief
         self.update_r_star()
         self.update_optimal_actions()
+        self.update_tables()
         if self.a_star_entropy < 1e-12:
             self.lambda_algo = 0.0
         else:
