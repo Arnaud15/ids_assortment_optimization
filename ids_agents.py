@@ -1,10 +1,10 @@
 from ids_utils import (
     InformationDirectedSampler,
-    ids_action_selection_numba,
-    ids_action_selection_approximate,
-    greedy_ids_action_selection,
-    information_ratio_numba,
-    delta_full_numba,
+    ids_exact_action,
+    greedy_ids_action,
+    information_ratio,
+    info_gain_step,
+    delta_step,
 )
 from env import act_optimally, possible_actions
 from base_agents import Agent, EpochSamplingAgent
@@ -17,12 +17,13 @@ class EpochSamplingIDS(EpochSamplingAgent):
         k,
         n,
         horizon,
-        correlated_sampling,
         limited_prefs,
         n_samples,
         info_type,
-        action_type,
-        scaling_factor=0.0,
+        objective,
+        dynamics,
+        scaling,
+        regret_threshold,
         **kwargs,
     ):
         EpochSamplingAgent.__init__(
@@ -30,7 +31,7 @@ class EpochSamplingIDS(EpochSamplingAgent):
             k,
             n,
             horizon=horizon,
-            correlated_sampling=False,
+            sampling=0,
             limited_preferences=limited_prefs,
         )
         self.ids_sampler = InformationDirectedSampler(
@@ -38,14 +39,13 @@ class EpochSamplingIDS(EpochSamplingAgent):
             assortment_size=k,
             info_type=info_type,
             n_samples=n_samples,
+            dynamics=dynamics,
         )
-        self.fitted_scaler = self.ids_sampler.lambda_algo
-        self.action_selection = action_type
-        self.scaling_factor = scaling_factor
-        print(f"Action selection+{self.action_selection}")
-        print(f"lambda scaler: {self.ids_sampler.lambda_algo}")
-        print(f"satisficing delta: {self.scaling_factor}")
-        if self.action_selection == "exact":
+        self.fitted_scaler = 1.0
+        self.scaling = scaling
+        self.objective = objective
+        self.regret_threshold = regret_threshold
+        if self.objective == "exact":
             self.all_actions = np.array(
                 possible_actions(self.n_items, self.assortment_size),
                 dtype=int,
@@ -56,111 +56,86 @@ class EpochSamplingIDS(EpochSamplingAgent):
             self.ids_sampler.n_samples
         )
         self.ids_sampler.update_belief(self.prior_belief)
-        misc = None
-        approximate_action = None
-        if self.action_selection == "exact":
-            misc = np.array(
-                ids_action_selection_numba(
-                    g_=self.ids_sampler.g_,
-                    actions_set=self.all_actions,
-                    sampled_preferences=self.prior_belief,
-                    r_star=self.ids_sampler.r_star,
-                    actions_star=self.ids_sampler.actions_star,
-                    counts_star=self.ids_sampler.counts_star,
-                    thetas_star=self.ids_sampler.thetas_star,
-                )
+        greedy_proposal = (
+            np.sqrt(self.ids_sampler.delta_min) < self.regret_threshold
+        )
+        if greedy_proposal:
+            assortment = act_optimally(
+                np.squeeze(self.prior_belief.mean(0)),
+                top_k=self.assortment_size,
             )
-        elif self.action_selection == "approximate":
-            if np.sqrt(self.ids_sampler.delta_min) < self.scaling_factor:
-                approximate_action = act_optimally(
-                    np.squeeze(self.prior_belief.mean(0)),
-                    top_k=self.assortment_size,
-                )
-                self.data_stored["greedy"].append(True)
-            else:
-                misc = np.array(
-                    greedy_ids_action_selection(
-                        scaling_factor=self.fitted_scaler,
-                        g_=self.ids_sampler.g_,
-                        sampled_preferences=self.prior_belief,
-                        r_star=self.ids_sampler.r_star,
-                        actions_star=self.ids_sampler.actions_star,
-                        counts_star=self.ids_sampler.counts_star,
-                        thetas_star=self.ids_sampler.thetas_star,
-                    )
-                )
-                self.data_stored["greedy"].append(False)
-        elif self.action_selection == "greedy":
-            misc = np.array(
-                greedy_ids_action_selection(
-                    scaling_factor=self.fitted_scaler,
-                    g_=self.ids_sampler.g_,
-                    sampled_preferences=self.prior_belief,
-                    r_star=self.ids_sampler.r_star,
-                    actions_star=self.ids_sampler.actions_star,
-                    counts_star=self.ids_sampler.counts_star,
-                    thetas_star=self.ids_sampler.thetas_star,
-                )
-            )
-        elif self.action_selection == "greedy2":
-            misc = np.array(
-                greedy_ids_action_selection(
-                    scaling_factor=(self.T - self.current_step)
-                    * self.ids_sampler.lambda_algo,
-                    g_=self.ids_sampler.g_,
-                    sampled_preferences=self.prior_belief,
-                    r_star=self.ids_sampler.r_star,
-                    actions_star=self.ids_sampler.actions_star,
-                    counts_star=self.ids_sampler.counts_star,
-                    thetas_star=self.ids_sampler.thetas_star,
-                )
-            )
-        else:
-            raise ValueError("Must be one of (exact | approximate | greedy)")
-        if misc is None:
-            assert approximate_action is not None
-            g_approx = self.ids_sampler.g_(
-                action=approximate_action,
+            g_approx = info_gain_step(
+                action=assortment,
                 sampled_preferences=self.prior_belief,
                 actions_star=self.ids_sampler.actions_star,
                 counts=self.ids_sampler.counts_star,
                 thetas=self.ids_sampler.thetas_star,
             )
             g_approx = 1e-12 if g_approx < 1e-12 else g_approx
-            d_approx = delta_full_numba(
-                action=approximate_action,
+            d_approx = delta_step(
+                action=assortment,
                 sampled_preferences=self.prior_belief,
                 r_star=self.ids_sampler.r_star,
             )
-            ir_approx = information_ratio_numba(
-                rho=0.5, d1=d_approx, d2=d_approx, g1=g_approx, g2=g_approx
+            rho_policy = 0.5
+            ir_assortment = information_ratio(
+                rho=rho_policy,
+                d1=d_approx,
+                d2=d_approx,
+                g1=g_approx,
+                g2=g_approx,
             )
-            misc = np.array(
-                [
-                    approximate_action,
-                    ir_approx,
-                    0.5,
-                    g_approx,
-                    d_approx,
-                    g_approx,
-                    d_approx,
-                ]
+            self.data_stored["greedy"].append(1)
+        elif self.objective == "exact":
+            assortment, ir_assortment, rho_policy = ids_exact_action(
+                g_=self.ids_sampler.g_,
+                d_=self.ids_sampler.d_,
+                actions_set=self.all_actions,
+                sampled_preferences=self.prior_belief,
+                r_star=self.ids_sampler.r_star,
+                actions_star=self.ids_sampler.actions_star,
+                counts_star=self.ids_sampler.counts_star,
+                thetas_star=self.ids_sampler.thetas_star,
             )
-        self.current_action = misc[0]
-        self.fitted_scaler = misc[1]
-        misc = np.concatenate(
-            [
-                misc,
-                np.array(
-                    [
-                        self.ids_sampler.a_star_entropy,
-                        self.ids_sampler.delta_min,
-                    ]
-                ),
-            ]
+        else:
+            assert self.objective == "lambda", "Choice of [exact, lambda]."
+            if self.scaling == "autoreg":
+                lambda_scaler = self.fitted_scaler
+            elif self.scaling == "time":
+                lambda_scaler = self.ids_sampler.lambda_algo * (
+                    self.T - self.current_step
+                )
+            else:
+                raise ValueError("Scaling: choice of [autoreg, time].")
+            # print("check in the epoch setting")
+            # print(self.ids_sampler.r_star)
+            # print(
+            #     self.ids_sampler.d_(
+            #         np.arange(self.assortment_size),
+            #         self.prior_belief,
+            #         self.ids_sampler.r_star,
+            #     )
+            # )
+            assortment, ir_assortment, rho_policy = greedy_ids_action(
+                scaling_factor=lambda_scaler,
+                g_=self.ids_sampler.g_,
+                d_=self.ids_sampler.d_,
+                sampled_preferences=self.prior_belief,
+                r_star=self.ids_sampler.r_star,
+                actions_star=self.ids_sampler.actions_star,
+                counts_star=self.ids_sampler.counts_star,
+                thetas_star=self.ids_sampler.thetas_star,
+            )
+            self.data_stored["greedy"].append(0)
+        self.current_action = assortment
+        self.fitted_scaler = ir_assortment
+        self.data_stored["info_ratio"].append(ir_assortment)
+        self.data_stored["entropy_a_star"].append(
+            self.ids_sampler.a_star_entropy
         )
-        self.data_stored["IDS_logs"].append(misc[1:])
-        return misc[0]
+        self.data_stored["rho_policy"].append(rho_policy)
+        self.data_stored["delta_min_2"].append(self.ids_sampler.delta_min ** 2)
+        return assortment
 
 
 def best_mixture(delta, gain):

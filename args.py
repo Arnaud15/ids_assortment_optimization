@@ -1,105 +1,96 @@
 import argparse
 import os
 
-# EPOCH BASED SAMPLING PARAMS
-# Whether to employ the exploration bonus introduced in the paper
-PAPER_EXPLORATION_BONUS = False
-# Whether to employ the paper's faulty gaussian approximations
-PAPER_UNDEFINED_PRIOR = True
-BETA_RVS = True
-
-# SOFT_SPARSE SETTING PARAMS
-BAD_ITEM_CONSTANT = 0.5  # soft_sparse preference for bad items
-TOP_ITEM_CONSTANT = 1.0  # preference for (know) top item in soft-sparse
-OUTPUTS_FOLDER = "outputs"
-if not os.path.isdir(OUTPUTS_FOLDER):
-    os.makedirs(OUTPUTS_FOLDER)
+RAW_OUTPUTS_FOLDER = "raw_outputs"
+if not os.path.isdir(RAW_OUTPUTS_FOLDER):
+    os.makedirs(RAW_OUTPUTS_FOLDER)
+AGG_OUTPUTS_FOLDER = "aggregated_outputs"
+if not os.path.isdir(AGG_OUTPUTS_FOLDER):
+    os.makedirs(AGG_OUTPUTS_FOLDER)
+PLOTS_FOLDER = "plots"
+if not os.path.isdir(PLOTS_FOLDER):
+    os.makedirs(PLOTS_FOLDER)
+SUPPORTED_AGENTS = ["ts", "ids", "rd"]
 
 
-def get_experiment_args(run_or_plot):
+def get_experiment_args():
     parser = argparse.ArgumentParser()
 
-    if run_or_plot == "run":
-        # AGENT SELECTED TO RUN EXP
-        parser.add_argument(
-            "--agent",
-            type=str,
-            required=True,
-            help="choice of ts, ids, rd, ets, eids",
-        )
-    elif run_or_plot == "plot":
-        # AGENTS TO APPEAR ON PLOT
-        parser.add_argument(
-            "--agents",
-            type=str,
-            required=True,
-            help="select agents appearing on the plot",
-            nargs="+",
-        )
-    else:
-        raise ValueError("Incorrect argument: choice of 'run' or 'plot'")
-
-    # EXP NAME
+    # SCRIPT TYPE
     parser.add_argument(
-        "--name",
+        "--script",
         type=str,
         required=True,
-        help="identifier for the experiment, beyond agent_env_params",
+        help="Choice of 'run', 'agg', 'plot'",
+        choices=["run", "agg", "plot"],
+    )
+
+    # AGENT SELECTED TO RUN EXP
+    parser.add_argument(
+        "--agent",
+        type=str,
+        required=False,
+        help="Choice of ts, ids, rd.",
+        choices=SUPPORTED_AGENTS,
+    )
+
+    # AGENT to plot / aggregate data from
+    parser.add_argument(
+        "--agents",
+        type=str,
+        required=False,
+        help="Select agents for plot / aggregation.",
+        nargs="+",
     )
 
     # ENV PARAMETERS
     parser.add_argument(
-        "-n", type=int, default=10, help="number of items available"
+        "-N", type=int, default=100, help="Number of items available."
     )
     parser.add_argument(
-        "-k", type=int, default=3, help="size of the assortments"
+        "-K", type=int, default=5, help="size of the assortments"
+    )
+    parser.add_argument(
+        "-T",
+        type=int,
+        default=50000,
+        help="Number of random simulations to carry out with agent.",
     )
     parser.add_argument(
         "--prior",
         type=str,
-        default="full_sparse",
-        help="possible values: 'uniform', 'soft_sparse', 'full_sparse'",
+        default="uniform",
+        help="Possible values: 'uniform', 'soft_sparse', 'full_sparse'.",
+        choices=["uniform", "soft_sparse", "full_sparse"],
     )
     parser.add_argument(
         "-p",
         type=float,
-        default=0.5,
-        help="proba for the fallback item to be picked",
+        default=0.15,
+        help="Proba for the fallback item to be picked.",
     )
-    # TODO env prior and agents must be compatible
 
     # BASIC EXP PARAMETERS
     parser.add_argument(
-        "--horizon",
-        type=int,
-        default=5000,
-        help="number of random simulations to carry out with agent",
-    )
-    parser.add_argument(
         "--nruns",
         type=int,
-        default=100,
-        help="number of random simulations to carry out with agent",
-    )
-    parser.add_argument(
-        "--verbose",
-        type=int,
-        default=0,
-        help="print intermediate info during episodes or not",
+        default=10,
+        help="Number of random simulations to carry out with agent.",
     )
 
     # Thompson Sampling PARAMETERS
     parser.add_argument(
-        "--correlated_sampling",
+        "--sampling",
         type=int,
-        default=1,
-        help="correlated sampling or no",
+        default=0,
+        help="0: default, 1: correlated sampling, 2: optimistic sampling",
+        choices=[0, 1, 2],
     )
     parser.add_argument(
         "--optim_prob",
         type=float,
         default=None,
-        help="optimism probability for the TSCS sparse agent",
+        help="Optimism probability for the TSCS sparse agent.",
     )
 
     # Information Directed Sampling PARAMETERS
@@ -107,48 +98,57 @@ def get_experiment_args(run_or_plot):
         "--info_type",
         type=str,
         default="gain",
-        help="choice of 'gain' and 'variance'",
+        help="Choice of 'gain' and 'variance'.",
+        choices=["gain", "variance"],
     )
     parser.add_argument(
-        "--ids_samples",
-        type=int,
-        default=100,
-        help="number of posterior samples for IDS",
-    )
-    parser.add_argument(
-        "--ids_action_selection",
+        "--objective",
         type=str,
         default="exact",
-        help="action selection: exact O(A**2), approximate O(A), greedy O(NK)",
+        help="Choice of 'exact' and 'lambda'.",
+        choices=["exact", "lambda"],
     )
     parser.add_argument(
-        "--greedy_scaler",
+        "--dynamics",
+        type=str,
+        default="step",
+        help="Choice of 'step' and 'epoch'.",
+        choices=["step", "epoch"],
+    )
+    parser.add_argument(
+        "--M",
+        type=int,
+        default=150,
+        help="Number of posterior samples for IDS.",
+    )
+    parser.add_argument(
+        "--scaling",
+        type=str,
+        default="autoreg",
+        help="Choice of 'autoreg' and 'time'.",
+        choices=["autoreg", "time"],
+    )
+    parser.add_argument(
+        "--D",
         type=float,
-        default=0.00316,
-        help="scaling factor for greedy action selection",
-    )
-    parser.add_argument(
-        "--find_best_scaler",
-        type=int,
-        default=0,
-        help="execute grid search for best greedy scaler",
-    )
-    parser.add_argument(
-        "--best_scaler_h",
-        type=int,
-        default=1000,
-        help="horizon for runs in the grid search",
-    )
-    parser.add_argument(
-        "--best_scaler_n",
-        type=int,
-        default=10,
-        help="number of runs in the grid search",
-    )
-    parser.add_argument(
-        "-m",
-        type=int,
-        default=25,
-        help="number of actions in action space reduction",
+        default=0.0,
+        help="Regret threshold for satisficing IDS",
     )
     return parser.parse_args()
+
+
+"""
+Danger Zone:
+The following global constants should (almost)
+never be touched.
+"""
+
+# EPOCH BASED SAMPLING PARAMS
+# Whether to employ the exploration bonus introduced in the paper
+PAPER_EXPLORATION_BONUS = False
+# Whether to employ the paper's faulty gaussian approximations
+PAPER_UNDEFINED_PRIOR = True
+
+# SOFT_SPARSE SETTING PARAMS
+BAD_ITEM_CONSTANT = 0.5  # soft_sparse preference for bad items
+TOP_ITEM_CONSTANT = 1.0  # preference for (know) top item in soft-sparse

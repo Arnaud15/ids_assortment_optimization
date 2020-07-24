@@ -4,15 +4,13 @@ import numpy as np
 
 
 class EpochSamplingTS(EpochSamplingAgent):
-    def __init__(
-        self, k, n, horizon, correlated_sampling, limited_prefs, **kwargs
-    ):
+    def __init__(self, k, n, horizon, sampling, limited_prefs, **kwargs):
         EpochSamplingAgent.__init__(
             self,
             k,
             n,
             horizon=horizon,
-            correlated_sampling=correlated_sampling,
+            sampling=sampling,
             limited_preferences=limited_prefs,
         )
 
@@ -27,20 +25,17 @@ class EpochSamplingTS(EpochSamplingAgent):
 
 class SparseTS(Agent):
     def __init__(
-        self,
-        k,
-        n,
-        correlated_sampling,
-        fallback_weight,
-        p_optim=None,
-        **kwargs,
+        self, k, n, sampling, fallback_weight, p_optim=None, **kwargs,
     ):
         super().__init__(k, n)
         self.fallback_weight = fallback_weight
-        self.correlated_sampling = correlated_sampling
+        self.sampling = sampling
+        assert (
+            self.sampling <= 1
+        ), "Optimistic sampling currently not supported."
         self.optimism_probability = p_optim
         print(
-            f"Agent with cs={self.correlated_sampling} and p_o={self.optimism_probability}"
+            f"Agent with cs={self.sampling} and p_o={self.optimism_probability}"
         )
         self.reset()
 
@@ -69,7 +64,7 @@ class SparseTS(Agent):
             # Posterior is deterministic
             samples[:, self.top_item_index] = np.inf
             samples[:, 0] = self.fallback_weight
-        elif not self.correlated_sampling:
+        elif not self.sampling:
             # Sample top item randomly
             top_item_guesses = np.random.choice(
                 self.normal_items_indices,
@@ -103,7 +98,7 @@ class SparseTS(Agent):
             np.squeeze(posterior_belief), top_k=self.assortment_size
         )
         self.current_action = action
-        assert 0 in action if (not self.correlated_sampling) else True
+        assert 0 in action if (not self.sampling) else True
         assert (
             self.top_item_index in action
             if self.top_item_index is not None

@@ -1,5 +1,5 @@
-import numpy as np
 import abc
+import numpy as np
 from scipy.stats import beta
 from collections import defaultdict
 from args import (
@@ -7,8 +7,8 @@ from args import (
     PAPER_EXPLORATION_BONUS,
     PAPER_UNDEFINED_PRIOR,
     TOP_ITEM_CONSTANT,
-    BETA_RVS,
 )
+from ids_utils import numba_expected_reward
 
 
 class Agent(abc.ABC):
@@ -74,15 +74,10 @@ class RandomAgent(Agent):
 
 class EpochSamplingAgent(Agent, abc.ABC):
     def __init__(
-        self,
-        k,
-        n,
-        horizon=None,
-        correlated_sampling=False,
-        limited_preferences=0,
+        self, k, n, horizon=None, sampling=0, limited_preferences=0,
     ):
         Agent.__init__(self, k, n)
-        self.correlated_sampling = correlated_sampling
+        self.sampling = sampling
         self.T = horizon
         self.first_item_best = True if limited_preferences else False
         print(f"Agent believes first=best? {self.first_item_best}")
@@ -90,10 +85,10 @@ class EpochSamplingAgent(Agent, abc.ABC):
 
     def act(self):
         if self.epoch_ended:
-            self.data_stored["steps"].append("new")
+            self.data_stored["steps"].append(1)
             action = self.proposal()
         else:
-            self.data_stored["steps"].append("same")
+            self.data_stored["steps"].append(0)
             action = self.current_action
         return action
 
@@ -102,7 +97,18 @@ class EpochSamplingAgent(Agent, abc.ABC):
         n_samples: how many samples to draw from the posterior
         returns: 2D array of shape (n_samples, N_items) of posterior samples
         """
-        if PAPER_EXPLORATION_BONUS:
+        if not self.sampling:
+            return np.array(
+                [
+                    (1 / beta.rvs(a=a_, b=b_, size=n_samples)) - 1
+                    for (a_, b_) in self.posterior_parameters
+                ]
+            ).T
+        elif PAPER_EXPLORATION_BONUS:
+            # Simply approximating the 1 / Beta(alpha, beta) - 1
+            # by a normal distribution
+            # In the paper, they make a strong approximation as 1/beta - 1
+            # has no well-defined mean / variance for (a, b) = (1, 1)
             gaussian_means = np.expand_dims(
                 [b_ / a_ for (a_, b_) in self.posterior_parameters], 0
             )
@@ -115,55 +121,34 @@ class EpochSamplingAgent(Agent, abc.ABC):
                 ],
                 0,
             )
-        else:
-            # Simply approximating the 1 / Beta(alpha, beta) - 1
-            # by a normal distribution
-            if PAPER_UNDEFINED_PRIOR:
-                # In the paper, they make a strong approximation as 1/beta - 1
-                # has no well-defined mean / variance
-                gaussian_stds = np.expand_dims(
-                    [
-                        np.sqrt(b_ / a_ * ((b_ / a_) + 1) / a_)
-                        for (a_, b_) in self.posterior_parameters
-                    ],
-                    0,
-                )
-                gaussian_means = np.expand_dims(
-                    [b_ / a_ for (a_, b_) in self.posterior_parameters], 0
-                )
-            else:
-                # In our setting, we start with a (3, 3) prior for each item
-                #  having a well-defined mean / variance
-                gaussian_stds = np.expand_dims(
-                    [
-                        np.sqrt(
-                            (b_ / (a_ - 1)) * ((b_ / (a_ - 1)) + 1) / (a_ - 2)
-                        )
-                        for (a_, b_) in self.posterior_parameters
-                    ],
-                    0,
-                )
-                gaussian_means = np.expand_dims(
-                    [b_ / (a_ - 1) for (a_, b_) in self.posterior_parameters],
-                    0,
-                )
-        theta_sampled = (
-            np.random.randn(n_samples, 1)
-            if self.correlated_sampling
-            else np.random.randn(n_samples, self.n_items)
-        )
-        # 1 / Beta(alpha, beta) - 1 prior from the Columbia paper
-        # Given up on this: slow and not so good
-        sample = gaussian_means + theta_sampled * gaussian_stds
-        if BETA_RVS and (not self.correlated_sampling):
-            return np.array(
+        elif PAPER_UNDEFINED_PRIOR:
+            gaussian_stds = np.expand_dims(
                 [
-                    (1 / beta.rvs(a=a_, b=b_, size=n_samples)) - 1
+                    np.sqrt(b_ / a_ * ((b_ / a_) + 1) / a_)
                     for (a_, b_) in self.posterior_parameters
-                ]
-            ).T
+                ],
+                0,
+            )
+            gaussian_means = np.expand_dims(
+                [b_ / a_ for (a_, b_) in self.posterior_parameters], 0
+            )
         else:
-            return sample
+            # In our setting, we start with a (3, 3) prior for each item
+            #  having a well-defined mean / variance
+            gaussian_stds = np.expand_dims(
+                [
+                    np.sqrt((b_ / (a_ - 1)) * ((b_ / (a_ - 1)) + 1) / (a_ - 2))
+                    for (a_, b_) in self.posterior_parameters
+                ],
+                0,
+            )
+            gaussian_means = np.expand_dims(
+                [b_ / (a_ - 1) for (a_, b_) in self.posterior_parameters], 0,
+            )
+        if self.sampling == 2:
+            raise ValueError("Optimistic sampling is not yet supported.")
+        theta_sampled = np.random.randn(n_samples, 1)
+        return gaussian_means + theta_sampled * gaussian_stds
 
     def reset(self):
         self.epoch_ended = True
