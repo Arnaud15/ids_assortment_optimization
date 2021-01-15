@@ -8,7 +8,6 @@ from args import (
     PAPER_UNDEFINED_PRIOR,
     TOP_ITEM_CONSTANT,
 )
-from ids_utils import numba_expected_reward
 
 
 class Agent(abc.ABC):

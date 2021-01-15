@@ -5,6 +5,9 @@ from argparse import Namespace
 from typing import Tuple, List
 from collections import defaultdict
 import numpy as np
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from env import AssortmentEnvironment
 from base_agents import Agent
@@ -14,6 +17,14 @@ from args import (
     RAW_OUTPUTS_FOLDER,
     AGG_OUTPUTS_FOLDER,
 )
+
+
+def params_to_gaussian(posterior):
+    gaussian_stds = np.array(
+        [np.sqrt(b_ / a_ * ((b_ / a_) + 1) / a_) for (a_, b_) in posterior],
+    )
+    gaussian_means = np.array([b_ / a_ for (a_, b_) in posterior],)
+    return gaussian_means, gaussian_stds
 
 
 def r_star_from_theta(theta: np.ndarray, k: int) -> float:
@@ -71,13 +82,15 @@ def args_to_agent_name(args: Namespace,) -> Tuple[str, str]:
             agent_name += optim_p
     else:
         assert agent_name[-3:] == "IDS"
-        if args.info_type == "variance":
-            agent_name = agent_name[:-3] + "V" + agent_name[-3:]
-        agent_name += args.objective
-        if args.objective == "lambda":
-            agent_name += args.scaling
-        agent_name += f"M{args.M}"
-        agent_name += f"dyn{args.dynamics}"
+        if "CIDS" not in agent_name:
+            print("Not ECIDS")
+            if args.info_type == "variance":
+                agent_name = agent_name[:-3] + "V" + agent_name[-3:]
+            agent_name += args.objective
+            if args.objective == "lambda":
+                agent_name += args.scaling
+            agent_name += f"M{args.M}"
+            agent_name += f"dyn{args.dynamics}"
     return agent_key, agent_name
 
 

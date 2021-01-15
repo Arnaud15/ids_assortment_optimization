@@ -10,7 +10,7 @@ if not os.path.isdir(AGG_OUTPUTS_FOLDER):
 PLOTS_FOLDER = "plots"
 if not os.path.isdir(PLOTS_FOLDER):
     os.makedirs(PLOTS_FOLDER)
-SUPPORTED_AGENTS = ["ts", "ids", "rd"]
+SUPPORTED_AGENTS = ["ts", "ids", "rd", "cids"]
 
 
 def get_experiment_args():
@@ -30,7 +30,7 @@ def get_experiment_args():
         "--agent",
         type=str,
         required=False,
-        help="Choice of ts, ids, rd.",
+        help="Choice of ts, ids, rd, cids",
         choices=SUPPORTED_AGENTS,
     )
 
@@ -45,7 +45,7 @@ def get_experiment_args():
 
     # ENV PARAMETERS
     parser.add_argument(
-        "-N", type=int, default=100, help="Number of items available."
+        "-N", type=int, default=20, help="Number of items available."
     )
     parser.add_argument(
         "-K", type=int, default=5, help="size of the assortments"
@@ -53,7 +53,7 @@ def get_experiment_args():
     parser.add_argument(
         "-T",
         type=int,
-        default=50000,
+        default=5000,
         help="Number of random simulations to carry out with agent.",
     )
     parser.add_argument(

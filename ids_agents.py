@@ -9,6 +9,93 @@ from ids_utils import (
 from env import act_optimally, possible_actions
 from base_agents import Agent, EpochSamplingAgent
 import numpy as np
+from run_utils import params_to_gaussian
+from math import pi
+from scipy.stats import beta, geom
+import cvxpy as cp
+
+
+class EpochSamplingCIDS(EpochSamplingAgent):
+    def __init__(
+        self, k, n, horizon, limited_prefs, n_samples, **kwargs,
+    ):
+        EpochSamplingAgent.__init__(
+            self,
+            k,
+            n,
+            horizon=horizon,
+            sampling=0,
+            limited_preferences=limited_prefs,
+        )
+        self.n_samples = n_samples
+
+    def ts_cs_action(self):
+        posterior_belief = self.sample_from_posterior(1)
+        return act_optimally(
+            np.squeeze(posterior_belief), top_k=self.assortment_size
+        )
+
+    def proposal(self):
+        # self.prior_belief = self.sample_from_posterior(
+        #     self.n_samples
+        # )
+        expected_rewards, stds = params_to_gaussian(self.posterior_parameters)
+
+        entropies_start = 0.5 * np.log(2 * pi * np.exp(1) * stds ** 2)
+        a_s = np.array([x[0] for x in self.posterior_parameters]).reshape(
+            -1, 1
+        )
+        b_s = np.array([x[1] for x in self.posterior_parameters]).reshape(
+            -1, 1
+        )
+        posterior_samples = (
+            1 / beta.rvs(a=a_s, b=b_s, size=(a_s.shape[0], self.n_samples)) - 1
+        )
+        observations_samples = geom.rvs(1 / (posterior_samples + 1)) - 1
+        new_posteriors = [
+            [
+                (
+                    self.posterior_parameters[i][0] + 1,
+                    self.posterior_parameters[i][1]
+                    + observations_samples[i][j],
+                )
+                for j in range(self.n_samples)
+            ]
+            for i in range(self.n_items)
+        ]
+        new_entropies = [
+            [
+                0.5 * np.log(2 * pi * np.exp(1) * std ** 2)
+                for std in params_to_gaussian(new_posteriors[i])[1]
+            ]
+            for i in range(self.n_items)
+        ]
+        new_entropies = np.array(new_entropies)
+        new_entropies = new_entropies.mean(1)
+        reductions = entropies_start - new_entropies
+
+        ts_cs_action = self.ts_cs_action()
+        ts_cs_gain = reductions[ts_cs_action].sum()
+        x = cp.Variable(self.n_items)
+        objective = cp.Maximize(expected_rewards @ x)
+        constraints = [
+            0 <= x,
+            x <= 1,
+            cp.sum(x) == self.assortment_size,
+            x @ reductions >= ts_cs_gain,
+        ]
+        prob = cp.Problem(objective, constraints,)
+        prob.solve(solver="ECOS")
+
+        action = np.random.choice(
+            a=np.arange(self.n_items),
+            p=x.value / x.value.sum(),
+            size=self.assortment_size,
+            replace=False,
+        )
+        action = act_optimally(np.squeeze(x.value), top_k=self.assortment_size)
+        self.current_action = action
+        return action
 
 
 class EpochSamplingIDS(EpochSamplingAgent):

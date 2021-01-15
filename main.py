@@ -3,7 +3,7 @@ import os
 from env import AssortmentEnvironment
 from base_agents import RandomAgent
 from ts_agents import EpochSamplingTS, SparseTS
-from ids_agents import EpochSamplingIDS, SparseIDS
+from ids_agents import EpochSamplingIDS, SparseIDS, EpochSamplingCIDS
 from run_utils import (
     args_to_exp_id,
     args_to_agent_name,
@@ -29,6 +29,7 @@ AGENTS = {
     "eids": EpochSamplingIDS,
     "ts": SparseTS,
     "ids": SparseIDS,
+    "ecids": EpochSamplingCIDS,
 }
 
 
