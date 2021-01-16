@@ -74,8 +74,11 @@ class EpochSamplingCIDS(EpochSamplingAgent):
         new_entropies = new_entropies.mean(1)
         reductions = entropies_start - new_entropies
 
-        ts_cs_action = self.ts_cs_action()
+        optimistic_expectations = expected_rewards + 2 * stds
+        ts_cs_action = act_optimally(np.squeeze(optimistic_expectations), top_k=self.assortment_size)
+        # ts_cs_action = self.ts_cs_action()
         ts_cs_gain = reductions[ts_cs_action].sum()
+        
         x = cp.Variable(self.n_items)
         objective = cp.Maximize(expected_rewards @ x)
         constraints = [
@@ -87,13 +90,17 @@ class EpochSamplingCIDS(EpochSamplingAgent):
         prob = cp.Problem(objective, constraints,)
         prob.solve(solver="ECOS")
 
-        action = np.random.choice(
-            a=np.arange(self.n_items),
-            p=x.value / x.value.sum(),
-            size=self.assortment_size,
-            replace=False,
-        )
-        action = act_optimally(np.squeeze(x.value), top_k=self.assortment_size)
+        try:
+            action = np.random.choice(
+                a=np.arange(self.n_items),
+                p=np.abs(x.value) / np.abs(x.value).sum(),
+                size=self.assortment_size,
+                replace=False,
+            )
+        except ValueError:
+            import ipdb
+            ipdb.set_trace()
+        # action = act_optimally(np.squeeze(x.value), top_k=self.assortment_size)
         self.current_action = action
         return action
 
