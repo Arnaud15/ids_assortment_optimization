@@ -96,21 +96,25 @@ class EpochSamplingAgent(Agent, abc.ABC):
         n_samples: how many samples to draw from the posterior
         returns: 2D array of shape (n_samples, N_items) of posterior samples
         """
+        a_s = self.posterior_parameters[0].reshape(1, -1)
+        b_s = self.posterior_parameters[1].reshape(1, -1)
         if not self.sampling:
-            return np.array(
-                [
-                    (1 / beta.rvs(a=a_, b=b_, size=n_samples)) - 1
-                    for (a_, b_) in self.posterior_parameters
-                ]
-            ).T
+            return (1 / beta.rvs(a=a_s, b=b_s, size=(n_samples, a_s.shape[1]))) - 1
+            # return np.array(
+            #     [
+            #         (1 / beta.rvs(a=a_, b=b_, size=n_samples)) - 1
+            #         for (a_, b_) in self.posterior_parameters
+            #     ]
+            # ).T
         elif PAPER_EXPLORATION_BONUS:
             # Simply approximating the 1 / Beta(alpha, beta) - 1
             # by a normal distribution
             # In the paper, they make a strong approximation as 1/beta - 1
             # has no well-defined mean / variance for (a, b) = (1, 1)
-            gaussian_means = np.expand_dims(
-                [b_ / a_ for (a_, b_) in self.posterior_parameters], 0
-            )
+            gaussian_means = b_s / a_s
+            # gaussian_means = np.expand_dims(
+            #     [b_ / a_ for (a_, b_) in self.posterior_parameters], 0
+            # )
             # Using their extra exploration bonus
             gaussian_stds = np.expand_dims(
                 [
@@ -121,29 +125,35 @@ class EpochSamplingAgent(Agent, abc.ABC):
                 0,
             )
         elif PAPER_UNDEFINED_PRIOR:
-            gaussian_stds = np.expand_dims(
-                [
-                    np.sqrt(b_ / a_ * ((b_ / a_) + 1) / a_)
-                    for (a_, b_) in self.posterior_parameters
-                ],
-                0,
-            )
-            gaussian_means = np.expand_dims(
-                [b_ / a_ for (a_, b_) in self.posterior_parameters], 0
-            )
+            gaussian_means = b_s / a_s
+            gaussian_stds = np.sqrt(b_s / a_s * ((b_s / a_s) + 1) / a_s)
+            # gaussian_stds = np.expand_dims(
+            #     [
+            #         np.sqrt(b_ / a_ * ((b_ / a_) + 1) / a_)
+            #         for (a_, b_) in self.posterior_parameters
+            #     ],
+            #     0,
+            # )
+            # gaussian_means = np.expand_dims(
+            #     [b_ / a_ for (a_, b_) in self.posterior_parameters], 0
+            # )
         else:
             # In our setting, we start with a (3, 3) prior for each item
             #  having a well-defined mean / variance
-            gaussian_stds = np.expand_dims(
-                [
-                    np.sqrt((b_ / (a_ - 1)) * ((b_ / (a_ - 1)) + 1) / (a_ - 2))
-                    for (a_, b_) in self.posterior_parameters
-                ],
-                0,
+            gaussian_means = b_s / (a_s - 1)
+            gaussian_stds = np.sqrt(
+                (b_s / (a_s - 1)) * ((b_s / (a_s - 1)) + 1) / (a_s - 2)
             )
-            gaussian_means = np.expand_dims(
-                [b_ / (a_ - 1) for (a_, b_) in self.posterior_parameters], 0,
-            )
+            # gaussian_stds = np.expand_dims(
+            #     [
+            #         np.sqrt((b_ / (a_ - 1)) * ((b_ / (a_ - 1)) + 1) / (a_ - 2))
+            #         for (a_, b_) in self.posterior_parameters
+            #     ],
+            #     0,
+            # )
+            # gaussian_means = np.expand_dims(
+            #     [b_ / (a_ - 1) for (a_, b_) in self.posterior_parameters], 0,
+            # )
         if self.sampling >= 2:
             raise ValueError("Optimistic sampling is not yet supported.")
         theta_sampled = np.random.randn(n_samples, 1)
@@ -155,14 +165,16 @@ class EpochSamplingAgent(Agent, abc.ABC):
         self.current_action = None
         self.epoch_picks = defaultdict(int)
         if PAPER_EXPLORATION_BONUS or PAPER_UNDEFINED_PRIOR:
-            self.posterior_parameters = [(1, 1) for _ in range(self.n_items)]
+            self.posterior_parameters = [np.ones(self.n_items), np.ones(self.n_items)]
         else:
-            self.posterior_parameters = [(3, 3) for _ in range(self.n_items)]
+            self.posterior_parameters = [
+                np.ones(self.n_items) * 3,
+                np.ones(self.n_items) * 3,
+            ]
         if self.first_item_best:
             # Corrected prior when we know that a single item is "worth it"
             self.posterior_parameters = [
-                (a_, b_ * BAD_ITEM_CONSTANT)
-                for (a_, b_) in self.posterior_parameters
+                (a_, b_ * BAD_ITEM_CONSTANT) for (a_, b_) in self.posterior_parameters
             ]
             self.posterior_parameters[0] = (1e5, 1e5 * TOP_ITEM_CONSTANT)
         self.data_stored = defaultdict(list)
@@ -172,14 +184,16 @@ class EpochSamplingAgent(Agent, abc.ABC):
         reward = self.perceive_reward(item_selected)
         if item_selected == self.n_items:
             self.epoch_ended = True
-            n_is = [
-                int(ix in self.current_action) for ix in range(self.n_items)
-            ]
-            v_is = [self.epoch_picks[i] for i in range(self.n_items)]
-            self.posterior_parameters = [
-                (a + n_is[ix], b + v_is[ix])
-                for ix, (a, b) in enumerate(self.posterior_parameters)
-            ]
+            n_is = np.array(
+                [int(ix in self.current_action) for ix in range(self.n_items)]
+            )
+            v_is = np.array([self.epoch_picks[i] for i in range(self.n_items)])
+            self.posterior_parameters[0] += n_is
+            self.posterior_parameters[1] += v_is
+            # self.posterior_parameters = [
+            #     (a + n_is[ix], b + v_is[ix])
+            #     for ix, (a, b) in enumerate(self.posterior_parameters)
+            # ]
             self.epoch_picks = defaultdict(int)
         else:
             self.epoch_picks[item_selected] += 1
