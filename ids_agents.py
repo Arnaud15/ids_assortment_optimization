@@ -36,49 +36,43 @@ class EpochSamplingCIDS(EpochSamplingAgent):
         )
 
     def proposal(self):
-        # self.prior_belief = self.sample_from_posterior(
-        #     self.n_samples
-        # )
         expected_rewards, stds = params_to_gaussian(self.posterior_parameters)
 
-        entropies_start = 0.5 * np.log(2 * pi * np.exp(1) * stds ** 2)
+        a_star_t = np.sort(expected_rewards)[-self.assortment_size]
+
         a_s = np.array([x[0] for x in self.posterior_parameters]).reshape(
             -1, 1
         )
         b_s = np.array([x[1] for x in self.posterior_parameters]).reshape(
             -1, 1
         )
+        ps = beta.cdf(1 / (a_star_t + 1), a=a_s, b=b_s)
+        entropies_start = -(
+            ps * np.log(np.maximum(ps, 1e-12))
+            + (1 - ps) * np.log(np.maximum(1 - ps, +1e-12))
+        )
         posterior_samples = (
-            1 / beta.rvs(a=a_s, b=b_s, size=(a_s.shape[0], self.n_samples)) - 1
+            1 / beta.rvs(a=a_s, b=b_s) - 1
         )
         observations_samples = geom.rvs(1 / (posterior_samples + 1)) - 1
-        new_posteriors = [
-            [
-                (
-                    self.posterior_parameters[i][0] + 1,
-                    self.posterior_parameters[i][1]
-                    + observations_samples[i][j],
-                )
-                for j in range(self.n_samples)
-            ]
-            for i in range(self.n_items)
-        ]
-        new_entropies = [
-            [
-                0.5 * np.log(2 * pi * np.exp(1) * std ** 2)
-                for std in params_to_gaussian(new_posteriors[i])[1]
-            ]
-            for i in range(self.n_items)
-        ]
-        new_entropies = np.array(new_entropies)
-        new_entropies = new_entropies.mean(1)
+        new_as = np.ones(observations_samples.shape)
+        new_bs = np.copy(observations_samples)
+        for i in range(self.n_items):
+            new_bs[i] += self.posterior_parameters[i][1]
+            new_as[i] += self.posterior_parameters[i][0]
+        new_ps = beta.cdf(1 / (a_star_t + 1), a=new_as, b=new_bs)
+        new_entropies = -(
+            new_ps * np.log(np.maximum(new_ps, 1e-12))
+            + (1 - new_ps) * np.log(np.maximum(1 - new_ps, +1e-12))
+        )
         reductions = entropies_start - new_entropies
 
         optimistic_expectations = expected_rewards + 2 * stds
-        ts_cs_action = act_optimally(np.squeeze(optimistic_expectations), top_k=self.assortment_size)
-        # ts_cs_action = self.ts_cs_action()
+        ts_cs_action = act_optimally(
+            np.squeeze(optimistic_expectations), top_k=self.assortment_size
+        )
         ts_cs_gain = reductions[ts_cs_action].sum()
-        
+
         x = cp.Variable(self.n_items)
         objective = cp.Maximize(expected_rewards @ x)
         constraints = [
@@ -97,10 +91,10 @@ class EpochSamplingCIDS(EpochSamplingAgent):
                 size=self.assortment_size,
                 replace=False,
             )
-        except ValueError:
+        except:
             import ipdb
+
             ipdb.set_trace()
-        # action = act_optimally(np.squeeze(x.value), top_k=self.assortment_size)
         self.current_action = action
         return action
 

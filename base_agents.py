@@ -144,7 +144,7 @@ class EpochSamplingAgent(Agent, abc.ABC):
             gaussian_means = np.expand_dims(
                 [b_ / (a_ - 1) for (a_, b_) in self.posterior_parameters], 0,
             )
-        if self.sampling == 2:
+        if self.sampling >= 2:
             raise ValueError("Optimistic sampling is not yet supported.")
         theta_sampled = np.random.randn(n_samples, 1)
         return gaussian_means + theta_sampled * gaussian_stds
