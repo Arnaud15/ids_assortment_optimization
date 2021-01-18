@@ -2,6 +2,7 @@ import os
 import pickle
 import time
 from argparse import Namespace
+from tqdm import tqdm
 from typing import Tuple, List
 from collections import defaultdict
 import numpy as np
@@ -112,7 +113,7 @@ def run_episode(
     actor.reset()
     top_item = envnmt.top_item
     rewards = np.zeros(n_steps)
-    for ix in range(n_steps):
+    for ix in tqdm(range(n_steps)):
         # act / step / update
         assortment = actor.act()
         item_selected = envnmt.step(assortment)

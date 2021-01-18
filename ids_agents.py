@@ -20,7 +20,7 @@ class EpochSamplingCIDS(EpochSamplingAgent):
         self, k, n, horizon, limited_prefs, n_samples, **kwargs,
     ):
         EpochSamplingAgent.__init__(
-            self, k, n, horizon=horizon, sampling=0, limited_preferences=limited_prefs,
+            self, k, n, horizon=horizon, sampling=1, limited_preferences=limited_prefs,
         )
         self.n_samples = n_samples
 
@@ -29,65 +29,73 @@ class EpochSamplingCIDS(EpochSamplingAgent):
         return act_optimally(np.squeeze(posterior_belief), top_k=self.assortment_size)
 
     def proposal(self):
-        expected_rewards, stds = params_to_gaussian(self.posterior_parameters)
+        # expected_rewards, stds = params_to_gaussian(self.posterior_parameters)
+        # expected_rewards = np.minimum(expected_rewards, 1.0)
 
-        a_star_t = np.sort(expected_rewards)[-self.assortment_size]
+        posterior_belief = self.sample_from_posterior(self.n_samples)
+        sorted_beliefs = np.sort(posterior_belief, axis=1)
+        thresholds = sorted_beliefs[:, -self.assortment_size].reshape(-1, 1)
 
-        # a_s = np.array([x[0] for x in self.posterior_parameters]).reshape(
-        #     -1, 1
+        best_actions = sorted_beliefs[:, -self.assortment_size :]
+        sum_rewards_best = best_actions.sum(1)
+        r_star = sum_rewards_best.mean()
+
+        expected_rewards = posterior_belief.mean(0)
+
+        mask = posterior_belief >= thresholds
+        if_star = (posterior_belief * mask).sum(0) / (mask.sum(0) + 1e-12)
+        else_star = (posterior_belief * (1 - mask)).sum(0) / ((1 - mask).sum(0) + 1e-12)
+        p_star = mask.sum(0) / mask.shape[0]
+        variances = (
+            p_star * (if_star - expected_rewards) ** 2
+            + (1 - p_star) * (else_star - expected_rewards) ** 2
+        )
+        variances = np.maximum(variances, 1e-12)
+        # a_star_t = np.sort(expected_rewards)[-self.assortment_size]
+        # a_s = self.posterior_parameters[0]
+        # b_s = self.posterior_parameters[1]
+        # ps = beta.cdf(1 / (a_star_t + 1), a=a_s, b=b_s)
+        # entropies_start = -(
+        #     ps * np.log(np.maximum(ps, 1e-12))
+        #     + (1 - ps) * np.log(np.maximum(1 - ps, +1e-12))
         # )
-        # b_s = np.array([x[1] for x in self.posterior_parameters]).reshape(
-        #     -1, 1
+        # posterior_samples = 1 / beta.rvs(a=a_s, b=b_s) - 1
+        # new_as = np.ones(self.n_items)
+        # new_as += a_s
+        # new_bs = (geom.rvs(1 / (posterior_samples + 1)) - 1) + b_s
+        # new_ps = beta.cdf(1 / (a_star_t + 1), a=new_as, b=new_bs)
+        # new_entropies = -(
+        #     new_ps * np.log(np.maximum(new_ps, 1e-12))
+        #     + (1 - new_ps) * np.log(np.maximum(1 - new_ps, +1e-12))
         # )
-        a_s = self.posterior_parameters[0]
-        b_s = self.posterior_parameters[1]
-        # import ipdb
+        # reductions = np.maximum(entropies_start - new_entropies, 1e-8)
 
-        # ipdb.set_trace()
-        ps = beta.cdf(1 / (a_star_t + 1), a=a_s, b=b_s)
-        entropies_start = -(
-            ps * np.log(np.maximum(ps, 1e-12))
-            + (1 - ps) * np.log(np.maximum(1 - ps, +1e-12))
-        )
-        posterior_samples = 1 / beta.rvs(a=a_s, b=b_s) - 1
-        new_as = np.ones(self.n_items)
-        new_as += a_s
-        new_bs = (geom.rvs(1 / (posterior_samples + 1)) - 1) + b_s
-        new_ps = beta.cdf(1 / (a_star_t + 1), a=new_as, b=new_bs)
-        new_entropies = -(
-            new_ps * np.log(np.maximum(new_ps, 1e-12))
-            + (1 - new_ps) * np.log(np.maximum(1 - new_ps, +1e-12))
-        )
-        reductions = entropies_start - new_entropies
-
-        optimistic_expectations = expected_rewards + 2 * stds
-        ts_cs_action = act_optimally(
-            np.squeeze(optimistic_expectations), top_k=self.assortment_size
-        )
-        ts_cs_gain = reductions[ts_cs_action].sum()
-
-        x = cp.Variable(self.n_items)
-        objective = cp.Maximize(expected_rewards @ x)
-        constraints = [
-            0 <= x,
-            x <= 1,
-            cp.sum(x) == self.assortment_size,
-            x @ reductions >= ts_cs_gain,
-        ]
+        x = cp.Variable(self.n_items, pos=True)
+        rewards = cp.Parameter(self.n_items, pos=True)
+        gains = cp.Parameter(self.n_items, pos=True)
+        exp_regret = r_star - x @ rewards
+        exp_gain = x @ gains
+        information_ratio = cp.quad_over_lin(exp_regret, exp_gain)
+        objective = cp.Minimize(information_ratio)
+        constraints = [0 <= x, x <= 1, cp.sum(x) == self.assortment_size]
         prob = cp.Problem(objective, constraints,)
-        prob.solve(solver="ECOS")
+        rewards.value = expected_rewards
+        gains.value = variances
 
         try:
+            prob.solve(solver="ECOS")
             action = np.random.choice(
                 a=np.arange(self.n_items),
-                p=np.abs(x.value) / np.abs(x.value).sum(),
+                p=x.value / x.value.sum(),
                 size=self.assortment_size,
                 replace=False,
             )
-        except:
-            import ipdb
+        except cp.SolverError:
+            posterior_belief = self.sample_from_posterior(1)
+            action = act_optimally(
+                np.squeeze(posterior_belief), top_k=self.assortment_size
+            )
 
-            ipdb.set_trace()
         self.current_action = action
         return action
 
