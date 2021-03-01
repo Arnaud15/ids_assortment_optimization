@@ -131,28 +131,33 @@ class EpochSamplingCIDS(EpochSamplingAgent):
 
         try:
             prob.solve(solver="ECOS")
-            nzeros = (x.value < 1e-3).sum()
-            nones = (x.value > (1 - 1e-3)).sum()
+            zeros_index = (x.value < 1e-3)
+            ones_index = (x.value > 1 - 1e-3)
+            nzeros = zeros_index.sum()
+            nones = ones_index.sum()
             nitems = x.value.shape[0]
-            if (nitems - nones - nzeros):
-                logging.debug(
-                    f"{nitems - nones - nzeros} nstrict, {nones} ones, {nzeros} zeroes, {nitems} total items"
-                )
-                # print(expected_rewards)
-                # print(r_star)
-                # print(variances)
-                # print(x.value)
-                # print("*" * 15)
-            # logging.debug(f"{x.value[np.bitwise_and(x.value > 1e-5, x.value < (1 - 1e-5))]}")
-            action = np.random.choice(
-                a=np.arange(self.n_items),
-                p=x.value / x.value.sum(),
-                size=self.assortment_size,
-                replace=False,
+            logging.debug(
+                f"{nitems - nones - nzeros} nstrict, {nones} ones, {nzeros} zeroes, {nitems} total items"
             )
-            # action = simplex_action_selection(
-            #     n=self.n_items, k=self.assortment_size, x=x.value
-            # )
+            if (nitems - nones - nzeros) == 2:
+                all_items = np.arange(nitems)
+                strict_items = all_items[~np.bitwise_or(zeros_index, ones_index)]
+                probas = x.value[~np.bitwise_or(zeros_index, ones_index)]
+                assert strict_items.shape[0] == 2, strict_items
+                assert probas.shape[0] == 2, probas
+                # 2 items to randomize the selection over
+                logging.debug(
+                        f"items: {strict_items}, with probas: {probas}",
+                )
+                rho = probas[0]
+                u = np.random.rand()
+                if rho <= u:
+                    remaning_item = strict_items[0]
+                else:
+                    remaning_item = strict_items[1]
+                action = np.sort(np.concatenate([act_optimally(x.value,top_k=self.assortment_size - 1), np.array([remaning_item])]))
+            else:
+                action = act_optimally(x.value, top_k=self.assortment_size)
             if self.c % 5 == 121234:
                 logging.debug(
                     f"a:{action},x:{(100 * x.value).astype(int)},rew:{(100 * expected_rewards).astype(int)},gain:{(100 * np.sqrt(variances)).astype(int)}"
