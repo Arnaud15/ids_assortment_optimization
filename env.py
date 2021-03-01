@@ -1,4 +1,6 @@
 import numpy as np
+import logging
+from collections import Counter
 
 
 class AssortmentEnvironment(object):
@@ -6,6 +8,15 @@ class AssortmentEnvironment(object):
         self.items = np.arange(n + 1)
         self.n_items = n
         self.preferences = v
+        self.preferences = (self.preferences * 100).astype(int) / 100
+        self.counts = Counter()
+        self.selects = Counter()
+        logging.basicConfig(
+            level=logging.DEBUG,
+            filename="logs.log",
+            format="%(levelname)s:%(message)s",
+        )
+        logging.info(f"prefs={self.preferences}")
 
     def reset(self):
         if np.isinf(self.preferences).any():
@@ -27,10 +38,14 @@ class AssortmentEnvironment(object):
             possible_items = np.concatenate(
                 [np.array([self.n_items], dtype=int), self.items[assortment]]
             )  # "no item" can always happen
+            for item in possible_items:
+                self.counts[item] += 1
             subset_preferences = self.preferences[possible_items]
             sum_preferences = subset_preferences.sum()
             probabilities = subset_preferences / sum_preferences
-            return np.random.choice(possible_items, size=1, p=probabilities)[0]
+            selected = np.random.choice(possible_items, size=1, p=probabilities)[0]
+            self.selects[selected] += 1
+            return selected
 
 
 def act_optimally(belief, top_k):

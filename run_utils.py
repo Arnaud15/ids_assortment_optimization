@@ -27,7 +27,7 @@ def params_to_gaussian(posterior):
     # gaussian_means = np.array([b_ / a_ for (a_, b_) in posterior],)
     gaussian_means = posterior[1] / posterior[0]
     gaussian_stds = np.sqrt(
-        posterior[1] / posterior[0] * ((posterior[1] / posterior[0]) + 1) / posterior[0]
+        gaussian_means * (gaussian_means + 1.0) / posterior[0]
     )
     return gaussian_means, gaussian_stds
 
@@ -96,6 +96,8 @@ def args_to_agent_name(args: Namespace,) -> Tuple[str, str]:
                 agent_name += args.scaling
             agent_name += f"M{args.M}"
             agent_name += f"dyn{args.dynamics}"
+        else:
+            agent_name += args.info_type
     return agent_key, agent_name
 
 
@@ -124,6 +126,8 @@ def run_episode(
         else:
             unnorm_pick_proba = envnmt.preferences[assortment].sum()
             rewards[ix] = unnorm_pick_proba / (1.0 + unnorm_pick_proba)
+    print(f"selected: {[envnmt.selects[i] for i in range(actor.n_items)]}")
+    print(f"proposed: {[envnmt.counts[i] for i in range(actor.n_items)]}")
     return rewards, actor.stored_info()
 
 
@@ -181,12 +185,16 @@ def aggregate(file_root):
                 count_runs += 1
                 steps_data = run["logs"]["steps"]
                 best_r = run["best_reward"]
-                agg_data["rewards"].append([best_r - r for r in run["rewards"]])
+                agg_data["rewards"].append(
+                    [best_r - r for r in run["rewards"]]
+                )
                 agg_data["steps"].append(steps_data)
                 if not T:
                     T = len(run["rewards"])
                 if ("EpochIDS" in file_root) or ("EpochVIDS" in file_root):
-                    assert len(run["logs"]["info_ratio"]), "No information ratio logs."
+                    assert len(
+                        run["logs"]["info_ratio"]
+                    ), "No information ratio logs."
                     info_ratios = np.zeros(T)
                     rhos = np.zeros(T)
                     entropies = np.zeros(T)
@@ -231,7 +239,9 @@ def plot_results(file_root, key_to_plot):
         y_data = data_loaded[key_to_plot][0]
         x_data = np.arange(1, y_data.shape[0] + 1)
         errors = (
-            1.96 * data_loaded[key_to_plot][1] / np.sqrt(data_loaded[key_to_plot][2])
+            1.96
+            * data_loaded[key_to_plot][1]
+            / np.sqrt(data_loaded[key_to_plot][2])
         )
         plt.plot(x_data, y_data, label=truncated_label)
         plt.fill_between(
@@ -262,7 +272,9 @@ def proba_to_weight(p0: float) -> float:
     return p0 / (1 - p0)
 
 
-def get_prior(n_items: int, prior_type: str, fallback_weight: float) -> np.ndarray:
+def get_prior(
+    n_items: int, prior_type: str, fallback_weight: float
+) -> np.ndarray:
     """
     :param n_items:int: N parameter = number of items
     :param fallback_weight = weight of the fallback_item

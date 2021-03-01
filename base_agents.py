@@ -99,7 +99,9 @@ class EpochSamplingAgent(Agent, abc.ABC):
         a_s = self.posterior_parameters[0].reshape(1, -1)
         b_s = self.posterior_parameters[1].reshape(1, -1)
         if not self.sampling:
-            return (1 / beta.rvs(a=a_s, b=b_s, size=(n_samples, a_s.shape[1]))) - 1
+            return (
+                1 / beta.rvs(a=a_s, b=b_s, size=(n_samples, a_s.shape[1]))
+            ) - 1
             # return np.array(
             #     [
             #         (1 / beta.rvs(a=a_, b=b_, size=n_samples)) - 1
@@ -165,7 +167,10 @@ class EpochSamplingAgent(Agent, abc.ABC):
         self.current_action = None
         self.epoch_picks = defaultdict(int)
         if PAPER_EXPLORATION_BONUS or PAPER_UNDEFINED_PRIOR:
-            self.posterior_parameters = [np.ones(self.n_items), np.ones(self.n_items)]
+            self.posterior_parameters = [
+                np.ones(self.n_items),
+                np.ones(self.n_items),
+            ]
         else:
             self.posterior_parameters = [
                 np.ones(self.n_items) * 3,
@@ -174,7 +179,8 @@ class EpochSamplingAgent(Agent, abc.ABC):
         if self.first_item_best:
             # Corrected prior when we know that a single item is "worth it"
             self.posterior_parameters = [
-                (a_, b_ * BAD_ITEM_CONSTANT) for (a_, b_) in self.posterior_parameters
+                (a_, b_ * BAD_ITEM_CONSTANT)
+                for (a_, b_) in self.posterior_parameters
             ]
             self.posterior_parameters[0] = (1e5, 1e5 * TOP_ITEM_CONSTANT)
         self.data_stored = defaultdict(list)

@@ -45,15 +45,15 @@ def get_experiment_args():
 
     # ENV PARAMETERS
     parser.add_argument(
-        "-N", type=int, default=20, help="Number of items available."
+        "-N", type=int, default=100, help="Number of items available."
     )
     parser.add_argument(
-        "-K", type=int, default=5, help="size of the assortments"
+        "-K", type=int, default=3, help="size of the assortments"
     )
     parser.add_argument(
         "-T",
         type=int,
-        default=5000,
+        default=1000,
         help="Number of random simulations to carry out with agent.",
     )
     parser.add_argument(
@@ -74,7 +74,7 @@ def get_experiment_args():
     parser.add_argument(
         "--nruns",
         type=int,
-        default=10,
+        default=1,
         help="Number of random simulations to carry out with agent.",
     )
 
@@ -118,7 +118,7 @@ def get_experiment_args():
     parser.add_argument(
         "--M",
         type=int,
-        default=150,
+        default=1000,
         help="Number of posterior samples for IDS.",
     )
     parser.add_argument(

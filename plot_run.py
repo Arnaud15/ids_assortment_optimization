@@ -38,6 +38,9 @@ def print_regret(exp_names, exp_base_name):
         regrets = np.array(
             [run["best_reward"] - run["rewards"] for run in exp_data]
         )
+        import ipdb
+
+        ipdb.set_trace()
         n_steps = regrets.shape[1]
         cumulative_regret = np.cumsum(regrets, axis=1)
         err = (

@@ -1,5 +1,6 @@
 import numba
 from scipy.special import binom
+from scipy.stats import beta
 import numpy as np
 from env import act_optimally
 from collections import defaultdict
@@ -7,6 +8,59 @@ import math
 
 DISCRETIZATION_IDS = 11
 RHO_VALUES = np.linspace(start=0.0, stop=1.0, num=DISCRETIZATION_IDS)
+
+
+def bernoulli_entropy(proba):
+    clipped_proba = np.clip(proba, a_min=1e-12, a_max=1 - 1e-12)
+    return -(
+        np.log(clipped_proba) * proba + np.log(1 - clipped_proba) * (1 - proba)
+    )
+
+
+def compute_info_gains(
+    posterior_parameters, assortment_size, n_items, n_samples
+):
+    a_s = posterior_parameters[0].reshape(1, -1)
+    b_s = posterior_parameters[1].reshape(1, -1)
+    base_samples = np.random.rand(n_samples, n_items)
+    samples_before = (1 / beta.isf(a=a_s, b=b_s, q=base_samples)) - 1
+    samples_after = (1 / beta.isf(a=a_s + 1, b=b_s, q=base_samples)) - 1
+    sorted_beliefs = np.sort(samples_before, axis=1)
+    thresholds = sorted_beliefs[:, -assortment_size].reshape(-1, 1)
+    mask_before = samples_before >= thresholds
+    p_before = mask_before.sum(0) / mask_before.shape[0]
+    mask_after = samples_after >= thresholds
+    p_after = mask_after.sum(0) / mask_after.shape[0]
+    entropy_before = bernoulli_entropy(p_before)
+    entropy_after = bernoulli_entropy(p_after)
+    return np.clip(entropy_before - entropy_after, a_min=1e-12, a_max=None)
+
+
+def approximate_info_gain(vi_s, ni_s):
+    proba = vi_s / ni_s
+    return proba * (proba + 1.0) / (ni_s * (ni_s + 1.0))
+
+
+def simplex_action_selection(n, k, x):
+    x += np.random.rand(x.shape[0]) * 1e-8
+    v1 = max(0, k - 1)
+    v2 = min([n - v1, 2, k])
+    sortem_item_ixs = np.argsort(x)
+    deterministic = sortem_item_ixs[-v1:][:v1]
+    action = None
+    if not v2:
+        action = np.sort(deterministic)
+    elif v2 == 1:
+        last_action = sortem_item_ixs[-v1 - 1]
+        action = np.sort(np.append(deterministic, last_action))
+    else:
+        i1, i2 = sortem_item_ixs[-v1 - v2 : (-v1)]
+        p1, p2 = x[[i1, i2]]
+        np1 = p1 / (p1 + p2 + 1e-12)
+        rho = np.random.rand()
+        last_action = i1 if rho <= np1 else i2
+        action = np.sort(np.append(deterministic, last_action))
+    return action
 
 
 @numba.jit(nopython=True)

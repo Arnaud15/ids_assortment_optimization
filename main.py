@@ -52,6 +52,7 @@ def run_from_args(run_args, exp_name):
         limited_prefs=True if run_args.prior == "soft_sparse" else False,
         p_optim=run_args.optim_prob,
         sampling=run_args.sampling,
+        frequentist=run_args.sampling == 2,
         n_samples=run_args.M,
         info_type=run_args.info_type,
         objective=run_args.objective,
