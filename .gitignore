@@ -2,3 +2,9 @@ __pycache__/
 .ipynb_checkpoints/
 .vscode/
 outputs/
+raw_outputs/
+aggregated_outputs/
+plots/
+*.ipynb
+old_plots/
+*.png
