@@ -2,8 +2,8 @@ import sys
 import os
 from env import AssortmentEnvironment
 from base_agents import RandomAgent
-from ts_agents import EpochSamplingTS, SparseTS
-from ids_agents import EpochSamplingIDS, SparseIDS, EpochSamplingCIDS
+from ts_agents import EpochSamplingTS
+from ids_agents import EpochSamplingIDS, EpochSamplingCIDS
 from run_utils import (
     args_to_exp_id,
     args_to_agent_name,
@@ -17,6 +17,7 @@ from run_utils import (
 )
 from args import get_experiment_args, PLOTS_FOLDER
 import matplotlib.pyplot as plt
+import logging
 from tqdm import tqdm
 
 
@@ -26,8 +27,6 @@ AGENTS = {
     "erd": RandomAgent,
     "ets": EpochSamplingTS,
     "eids": EpochSamplingIDS,
-    "ts": SparseTS,
-    "ids": SparseIDS,
     "ecids": EpochSamplingCIDS,
 }
 
@@ -39,25 +38,20 @@ def run_from_args(run_args, exp_name):
     a given env type.
     """
     assert run_args.agent is not None, "Agent not specified for 'run' script."
+    logging.basicConfig(
+        level=logging.DEBUG,
+        filename="logs.log",
+        format="%(levelname)s:%(message)s",
+    )
 
     agent_key, agent_name = args_to_agent_name(run_args)
     print(f"Agent ID is: {agent_name}.")
     agent = AGENTS[agent_key](
         k=run_args.K,
         n=run_args.N,
-        horizon=run_args.T,
-        fallback_weight=proba_to_weight(run_args.p),
-        fallback_proba=run_args.p,
-        limited_prefs=True if run_args.prior == "soft_sparse" else False,
-        p_optim=run_args.optim_prob,
         sampling=run_args.sampling,
-        frequentist=run_args.sampling == 2,
         n_samples=run_args.M,
         info_type=run_args.info_type,
-        objective=run_args.objective,
-        dynamics=run_args.dynamics,
-        scaling=run_args.scaling,
-        regret_threshold=run_args.D,
         params=run_args,
     )
 
