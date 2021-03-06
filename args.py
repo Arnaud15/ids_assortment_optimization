@@ -60,8 +60,8 @@ def get_experiment_args():
         "--prior",
         type=str,
         default="uniform",
-        help="Possible values: 'uniform', 'soft_sparse', 'full_sparse'.",
-        choices=["uniform", "soft_sparse", "full_sparse"],
+        help="Possible values: 'uniform', 'full_sparse'.",
+        choices=["uniform", "full_sparse"],
     )
     parser.add_argument(
         "-p",

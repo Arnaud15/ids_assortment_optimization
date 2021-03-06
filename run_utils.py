@@ -10,7 +10,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from env import AssortmentEnvironment
+from env import AssortmentEnvironment, BernoulliSemi, CombEnv
 from base_agents import Agent
 from args import (
     BAD_ITEM_CONSTANT,
@@ -31,22 +31,6 @@ def params_to_gaussian(posterior):
     )
     return gaussian_means, gaussian_stds
 
-
-def r_star_from_theta(theta: np.ndarray, k: int) -> float:
-    """
-    Computes and returns
-    Expected reward from best assortment
-    For given parameters theta
-    """
-    import warnings
-
-    with warnings.catch_warnings(record=True) as w:
-        # Cause all warnings to always be triggered.
-        warnings.simplefilter("always")
-        # Trigger a warning.
-        top_preferences = np.sort(theta)[-(k + 1) :]
-        top_preferences = top_preferences / top_preferences.sum()
-    return top_preferences[:k].sum()
 
 
 def args_to_exp_id(args: Namespace,) -> str:
@@ -102,7 +86,7 @@ def args_to_agent_name(args: Namespace,) -> Tuple[str, str]:
 
 
 def run_episode(
-    envnmt: AssortmentEnvironment, actor: Agent, n_steps: int,
+    envnmt: CombEnv, actor: Agent, n_steps: int,
 ) -> Tuple[np.ndarray, dict]:
     """
     :param n_steps: simulation horizon
@@ -113,20 +97,17 @@ def run_episode(
     # Initialization of observations and agent
     envnmt.reset()
     actor.reset()
-    top_item = envnmt.top_item
     rewards = np.zeros(n_steps)
     for ix in tqdm(range(n_steps)):
         # act / step / update
         assortment = actor.act()
-        item_selected = envnmt.step(assortment)
-        actor.update(item_selected)
+        obs, reward = envnmt.step(assortment)
+        actor.update(obs)
         # Store expected reward, observation
-        if top_item is not None and top_item in assortment:
-            rewards[ix] = 1.0
-        else:
-            unnorm_pick_proba = envnmt.preferences[assortment].sum()
-            rewards[ix] = unnorm_pick_proba / (1.0 + unnorm_pick_proba)
-    print(f"selected: {[envnmt.selects[i] for i in range(actor.n_items)]}")
+        rewards[ix] = reward
+    print(
+        f"selected: {[envnmt.selections[i] for i in range(actor.n_items)]}"
+    )
     print(f"proposed: {[envnmt.counts[i] for i in range(actor.n_items)]}")
     return rewards, actor.stored_info()
 
@@ -281,19 +262,12 @@ def get_prior(
     :param prior_type: choice of (uniform, soft_sparse, full_sparse)
     """
     if prior_type == "uniform":
-        prior = np.random.rand(n_items + 1)
-    elif prior_type == "soft_sparse":
-        prior = np.random.rand(n_items + 1)
-        # Most items have preferences quite low (below 0.2)
-        prior *= BAD_ITEM_CONSTANT
-        # First item is the best with maximum preferences
-        prior[0] = 1.0 * TOP_ITEM_CONSTANT
+        prior = np.random.rand(n_items)
     elif prior_type == "full_sparse":
         top_item = np.random.randint(1, n_items)
-        prior = np.zeros(n_items + 1)
+        prior = np.zeros(n_items)
         prior[top_item] = np.inf
         prior[0] = fallback_weight
     else:
-        raise ValueError("Choice of 'uniform', 'soft_sparse', 'full_sparse'")
-    prior[-1] = 1.0
+        raise ValueError("Choice of 'uniform', 'full_sparse'")
     return prior

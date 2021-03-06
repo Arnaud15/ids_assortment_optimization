@@ -9,7 +9,6 @@ from run_utils import (
     args_to_agent_name,
     proba_to_weight,
     get_prior,
-    r_star_from_theta,
     run_episode,
     save_experiment_data,
     aggregate,
@@ -70,9 +69,9 @@ def run_from_args(run_args, exp_name):
             prior_type=run_args.prior,
             fallback_weight=proba_to_weight(run_args.p),
         )
-        env = AssortmentEnvironment(n=run_args.N, v=run_preferences)
+        env = AssortmentEnvironment(item_prefs=run_preferences)
         run_data = {
-            "best_reward": r_star_from_theta(run_preferences, run_args.K)
+            "best_reward": env.r_star_from_subset_size(run_args.K)
         }
         rewards_run, actor_logs = run_episode(
             envnmt=env, actor=agent, n_steps=run_args.T,

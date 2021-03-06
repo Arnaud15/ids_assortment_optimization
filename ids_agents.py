@@ -22,6 +22,7 @@ import logging
 def logar(arr):
     return (arr * 1000).astype(int) / 1000
 
+
 class EpochSamplingCIDS(EpochSamplingAgent):
     def __init__(
         self,
@@ -89,12 +90,12 @@ class EpochSamplingCIDS(EpochSamplingAgent):
         #     + (1 - p_star) * (else_star - expected_rewards) ** 2
         # )
         variances = p_star * (if_star - expected_rewards) ** 2
-            # posterior_belief = self.sample_from_posterior(self.n_samples)
-            # sorted_beliefs = np.sort(posterior_belief, axis=1)
-            # thresholds = sorted_beliefs[:, -self.assortment_size].reshape(-1, 1)
-            # mask = posterior_belief >= thresholds
-            # p_star = mask.sum(0) / mask.shape[0]
-            # variances *= p_star
+        # posterior_belief = self.sample_from_posterior(self.n_samples)
+        # sorted_beliefs = np.sort(posterior_belief, axis=1)
+        # thresholds = sorted_beliefs[:, -self.assortment_size].reshape(-1, 1)
+        # mask = posterior_belief >= thresholds
+        # p_star = mask.sum(0) / mask.shape[0]
+        # variances *= p_star
         variances = np.maximum(variances, 1e-12)
         # a_star_t = np.sort(expected_rewards)[-self.assortment_size]
         # a_s = self.posterior_parameters[0]
@@ -131,8 +132,8 @@ class EpochSamplingCIDS(EpochSamplingAgent):
 
         try:
             prob.solve(solver="ECOS")
-            zeros_index = (x.value < 1e-3)
-            ones_index = (x.value > 1 - 1e-3)
+            zeros_index = x.value < 1e-3
+            ones_index = x.value > 1 - 1e-3
             nzeros = zeros_index.sum()
             nones = ones_index.sum()
             nitems = x.value.shape[0]
@@ -141,21 +142,30 @@ class EpochSamplingCIDS(EpochSamplingAgent):
             )
             if (nitems - nones - nzeros) == 2:
                 all_items = np.arange(nitems)
-                strict_items = all_items[~np.bitwise_or(zeros_index, ones_index)]
+                strict_items = all_items[
+                    ~np.bitwise_or(zeros_index, ones_index)
+                ]
                 probas = x.value[~np.bitwise_or(zeros_index, ones_index)]
                 assert strict_items.shape[0] == 2, strict_items
                 assert probas.shape[0] == 2, probas
                 # 2 items to randomize the selection over
-                logging.debug(
-                        f"items: {strict_items}, with probas: {probas}",
-                )
+                logging.debug(f"items: {strict_items}, with probas: {probas}",)
                 rho = probas[0]
                 u = np.random.rand()
                 if rho <= u:
                     remaning_item = strict_items[0]
                 else:
                     remaning_item = strict_items[1]
-                action = np.sort(np.concatenate([act_optimally(x.value,top_k=self.assortment_size - 1), np.array([remaning_item])]))
+                action = np.sort(
+                    np.concatenate(
+                        [
+                            act_optimally(
+                                x.value, top_k=self.assortment_size - 1
+                            ),
+                            np.array([remaning_item]),
+                        ]
+                    )
+                )
             else:
                 action = act_optimally(x.value, top_k=self.assortment_size)
             if self.c % 5 == 121234:
@@ -163,17 +173,15 @@ class EpochSamplingCIDS(EpochSamplingAgent):
                     f"a:{action},x:{(100 * x.value).astype(int)},rew:{(100 * expected_rewards).astype(int)},gain:{(100 * np.sqrt(variances)).astype(int)}"
                 )
                 logging.debug(
-                        f"if_optimal: {if_star}, rew:{logar(expected_rewards)}, probas: {logar(p_star)}",
+                    f"if_optimal: {if_star}, rew:{logar(expected_rewards)}, probas: {logar(p_star)}",
                 )
                 logging.debug(
-                        f"if_optimal: {logar(if_star)}, rew:{logar(expected_rewards)}, probas: {logar(p_star)}",
+                    f"if_optimal: {logar(if_star)}, rew:{logar(expected_rewards)}, probas: {logar(p_star)}",
                 )
                 logging.debug(
                     f"n{self.posterior_parameters[0]}, v{self.posterior_parameters[1] / self.posterior_parameters[0]},"
                 )
-                logging.debug(
-                    f"obj{prob.value}"
-                )
+                logging.debug(f"obj{prob.value}")
         except cp.SolverError:
             logging.warning("solver error")
             posterior_belief = self.sample_from_posterior(1)

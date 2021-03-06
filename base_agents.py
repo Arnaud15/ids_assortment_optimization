@@ -202,7 +202,11 @@ class EpochSamplingAgent(Agent, abc.ABC):
             # ]
             self.epoch_picks = defaultdict(int)
         else:
-            self.epoch_picks[item_selected] += 1
+            try:
+                self.epoch_picks[item_selected] += 1
+            except TypeError:
+                assert item_selected.shape[0] == 1
+                self.epoch_picks[item_selected[0]] += 1
             self.epoch_ended = False
         return reward
 
