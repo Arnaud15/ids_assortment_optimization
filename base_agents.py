@@ -56,32 +56,14 @@ class RandomAgent(BayesAgent):
     def sample_from_posterior(self, n_samples):
         return np.random.rand(n_samples, self.n_items)
 
-
-class EpochSamplingAgent(BayesAgent, ABC):
-    def __init__(
-        self, k, n
-    ):
-        BayesAgent.__init__(self, k, n)
-        self.epoch_ended = True
-        self.current_action = None
-        self.epoch_picks = defaultdict(int)
-
-    def act(self):
-        if self.epoch_ended:
-            self.data_stored["steps"].append(1)
-            action = self.proposal()
-        else:
-            self.data_stored["steps"].append(0)
-            assert self.current_action is not None
-            action = self.current_action
-        return action
-
     @abstractmethod
     def proposal(self):
         pass
 
 
-def x_beta_sampling(a_s, b_s, n_samples: int, correlated_sampling: bool) -> np.ndarray:
+def x_beta_sampling(
+    a_s, b_s, n_samples: int, correlated_sampling: bool
+) -> np.ndarray:
     """
     n_samples: how many samples to draw from the posterior
     returns: 2D array of shape (n_samples, N_items) of posterior samples
@@ -99,9 +81,16 @@ def x_beta_sampling(a_s, b_s, n_samples: int, correlated_sampling: bool) -> np.n
                 (b_s / (a_s - 1)) * ((b_s / (a_s - 1)) + 1) / (a_s - 2)
             )
         theta_sampled = np.random.randn(n_samples, 1)
-        return gaussian_means.reshape(1, -1) + theta_sampled * gaussian_stds.reshape(1, -1)
+        return gaussian_means.reshape(
+            1, -1
+        ) + theta_sampled * gaussian_stds.reshape(1, -1)
     else:
         n_items = a_s.shape[0]
         return (
-            1 / beta.rvs(a=a_s.reshape(1, -1), b=b_s.reshape(1, -1), size=(n_samples, n_items))
+            1
+            / beta.rvs(
+                a=a_s.reshape(1, -1),
+                b=b_s.reshape(1, -1),
+                size=(n_samples, n_items),
+            )
         ) - 1

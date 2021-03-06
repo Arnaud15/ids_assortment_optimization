@@ -1,20 +1,14 @@
 from typing import Type
 from collections import defaultdict
 from env import act_optimally
-from base_agents import EpochSamplingAgent, x_beta_sampling
+from base_agents import BayesAgent, x_beta_sampling
 import numpy as np
 
 
-class EpochSamplingTS(EpochSamplingAgent):
+class EpochSamplingTS(BayesAgent):
     def __init__(self, k, n, sampling, **kwargs):
-        EpochSamplingAgent.__init__(
-            self,
-            k,
-            n,
-        )
+        BayesAgent.__init__(self, k, n)
         self.correlated_sampling = sampling
-        self._n_is = np.ones(self.n_items)
-        self._v_is = np.ones(self.n_items)
 
     def reset(self):
         self._n_is = np.ones(self.n_items)
@@ -22,9 +16,25 @@ class EpochSamplingTS(EpochSamplingAgent):
         self.epoch_ended = True
         self.current_action = None
         self.epoch_picks = defaultdict(int)
+        self.data_stored = defaultdict(list)
+
+    def act(self):
+        if self.epoch_ended:
+            self.data_stored["steps"].append(1)
+            action = self.proposal()
+        else:
+            self.data_stored["steps"].append(0)
+            assert self.current_action is not None
+            action = self.current_action
+        return action
 
     def sample_from_posterior(self, n_samples):
-            return x_beta_sampling(a_s=self._n_is, b_s=self._v_is, correlated_sampling=self.correlated_sampling, n_samples=n_samples)
+        return x_beta_sampling(
+            a_s=self._n_is,
+            b_s=self._v_is,
+            correlated_sampling=self.correlated_sampling,
+            n_samples=n_samples,
+        )
 
     def proposal(self):
         posterior_belief = self.sample_from_posterior(1)
@@ -38,7 +48,7 @@ class EpochSamplingTS(EpochSamplingAgent):
         try:
             item_selected = item_selected[0]
         except TypeError:
-            assert(isinstance(item_selected, int))
+            assert isinstance(item_selected, int)
         if item_selected == self.n_items:  # picked up the outside option
             self.epoch_ended = True
             assert self.current_action is not None

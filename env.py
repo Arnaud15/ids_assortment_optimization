@@ -14,7 +14,7 @@ class CombEnv(ABC):
         self._theta = model_params
         self.n_items = model_params.shape[0]
         self.items = np.arange(self.n_items)
-        assert(np.all(self._theta > 0.0))
+        assert np.all(self._theta > 0.0)
         self._counts = np.zeros(self.n_items)
         self._selections = np.zeros(self.n_items)
 

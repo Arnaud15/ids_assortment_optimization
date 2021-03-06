@@ -32,7 +32,6 @@ def params_to_gaussian(posterior):
     return gaussian_means, gaussian_stds
 
 
-
 def args_to_exp_id(args: Namespace,) -> str:
     """
     :param args: experiment parameters NameSpace
@@ -105,9 +104,7 @@ def run_episode(
         actor.update_posterior(obs)
         # Store expected reward, observation
         rewards[ix] = reward
-    print(
-        f"selected: {[envnmt.selections[i] for i in range(actor.n_items)]}"
-    )
+    print(f"selected: {[envnmt.selections[i] for i in range(actor.n_items)]}")
     print(f"proposed: {[envnmt.counts[i] for i in range(actor.n_items)]}")
     return rewards, actor.stored_info()
 
