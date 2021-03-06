@@ -1,3 +1,4 @@
+from cvxpy.expressions.cvxtypes import pos
 import numpy as np
 import cvxpy as cp
 import logging
@@ -71,7 +72,6 @@ def expected_regrets(posterior_belief, assortment_size):
     r_star = mean_rewards_best.mean()  # mean over samples
     expected_rewards = posterior_belief.mean(0)
     regrets = r_star - expected_rewards
-    assert np.sort(regrets)[:assortment_size].sum() > 0.0
     return regrets
 
 
@@ -109,4 +109,26 @@ def kl_if_a_star(posterior_belief, subset_size):
     p_1 = posterior_belief.mean(0)
     kl_1 = p_1_star * np.log(p_1_star / p_1)
     kl_0 = (1.0 - p_1_star) * np.log((1.0 - p_1_star) / (1.0 - p_1))
-    return kl_0 + kl_1
+    kl = (kl_0 + kl_1) * p_star
+    assert kl > 0.0
+    assert kl.shape == (posterior_belief.shape[1],)
+    return kl
+
+
+def kl_ids(posterior_belief, subset_size):
+    sorted_beliefs = np.sort(posterior_belief, axis=1)
+    thresholds = sorted_beliefs[:, -subset_size].reshape(-1, 1)
+    mask = posterior_belief >= thresholds
+    p_star = mask.sum(0) / mask.shape[0]
+    p_0_star = ((1 / (1.0 + posterior_belief)) * mask).sum(0) / (mask.sum(0) + 1e-12)
+    p_0_star_safe = np.clip(p_0_star, a_min=1e-12, a_max=1.0 - 1e-12)
+    p_0 = (1 / (1.0 + posterior_belief)).mean(0)
+    p_0_safe = np.clip(p_0, a_min=1e-12, a_max=1.0 - 1e-12)
+    p_1_star = 1.0 - p_0_star_safe
+    p_1 = 1.0 - p_0_safe
+    kl_1 = p_1_star * np.log(p_1_star / p_1)
+    kl_0 = p_0_star_safe * np.log(p_0_star_safe / p_0_safe)
+    kl_0 = (1.0 - p_1_star) * np.log((1.0 - p_1_star) / (1.0 - p_1))
+    kl = (kl_0 + kl_1) * p_star
+    assert kl.shape == (posterior_belief.shape[1],)
+    return np.maximum(kl, 1e-12)

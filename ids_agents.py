@@ -1,4 +1,11 @@
-from cids_utils import expected_regrets, solve_cvx, var_if_a_star, kl_if_a_star
+from cvxpy.expressions.cvxtypes import pos
+from cids_utils import (
+    expected_regrets,
+    solve_cvx,
+    var_if_a_star,
+    kl_if_a_star,
+    kl_ids,
+)
 from ids_utils import (
     InformationDirectedSampler,
     ids_exact_action,
@@ -19,7 +26,7 @@ class EpochSamplingCIDS(EpochSamplingTS):
         EpochSamplingTS.__init__(
             self, k, n, sampling=False,
         )
-        self.n_samples = n_samples
+        self.n_samples = 15
         assert info_type in {"variance", "gain"}
         self.info_type = info_type
 
@@ -28,10 +35,12 @@ class EpochSamplingCIDS(EpochSamplingTS):
         regrets = expected_regrets(
             posterior_belief=posterior_belief, assortment_size=self.subset_size
         )
-
         variances = var_if_a_star(
-            posterior_belief=posterior_belief, assortment_size=self.subset_size
+           posterior_belief=posterior_belief, assortment_size=self.subset_size
         )
+        # variances = kl_ids(
+        #      posterior_belief=posterior_belief, subset_size=self.subset_size
+        # )
 
         action = solve_cvx(
             regrets=regrets,
