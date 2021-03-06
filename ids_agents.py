@@ -1,18 +1,16 @@
 from ids_utils import (
-    approximate_info_gain,
     compute_info_gains,
-    simplex_action_selection,
     InformationDirectedSampler,
     ids_exact_action,
-    greedy_ids_action,
     information_ratio,
     info_gain_step,
     delta_step,
 )
 from env import act_optimally, possible_actions
-from base_agents import Agent, EpochSamplingAgent
+from base_agents import EpochSamplingAgent, x_beta_sampling
 import numpy as np
 from run_utils import params_to_gaussian
+from collections import defaultdict
 from math import pi
 from scipy.stats import beta, geom
 import cvxpy as cp
@@ -28,104 +26,56 @@ class EpochSamplingCIDS(EpochSamplingAgent):
         self,
         k,
         n,
-        horizon,
-        limited_prefs,
         n_samples,
         info_type,
-        frequentist,
         **kwargs,
     ):
         EpochSamplingAgent.__init__(
             self,
             k,
             n,
-            horizon=horizon,
-            sampling=0,
-            limited_preferences=limited_prefs,
         )
         self.n_samples = n_samples
         assert info_type in {"variance", "gain"}
         self.info_type = info_type
-        assert isinstance(frequentist, bool)
-        self.frequentist = frequentist
-        logging.basicConfig(
-            level=logging.DEBUG,
-            filename="logs.log",
-            format="%(levelname)s:%(message)s",
-        )
-        logging.info(
-            f"delta+ {self.frequentist}, approx_info_gain {self.info_type=='gain'}"
-        )
-        self.c = 1
+        self._n_is = np.ones(self.n_items)
+        self._v_is = np.ones(self.n_items)
 
-    def ts_cs_action(self):
-        posterior_belief = self.sample_from_posterior(1)
-        return act_optimally(
-            np.squeeze(posterior_belief), top_k=self.assortment_size
-        )
+    def reset(self):
+        self._n_is = np.ones(self.n_items)
+        self._v_is = np.ones(self.n_items)
+        self.epoch_ended = True
+        self.current_action = None
+        self.epoch_picks = defaultdict(int)
+        self.c = 0
+
+    def sample_from_posterior(self, n_samples):
+            return x_beta_sampling(a_s=self._n_is, b_s=self._v_is, correlated_sampling=False, n_samples=n_samples)
 
     def proposal(self):
-        # expected_rewards, stds = params_to_gaussian(self.posterior_parameters)
-        # expected_rewards = np.minimum(expected_rewards, 1.0)
-
         posterior_belief = self.sample_from_posterior(self.n_samples)
         sorted_beliefs = np.sort(posterior_belief, axis=1)
-        thresholds = sorted_beliefs[:, -self.assortment_size].reshape(-1, 1)
+        thresholds = sorted_beliefs[:, -self.subset_size].reshape(-1, 1)
 
-        best_actions = sorted_beliefs[:, -self.assortment_size :]
+        best_actions = sorted_beliefs[:, -self.subset_size :]
         sum_rewards_best = best_actions.sum(1)
         r_star = sum_rewards_best.mean()
 
         expected_rewards = posterior_belief.mean(0)
-        # min_rew = expected_rewards.min() / 1e5
-        # expected_rewards += np.random.rand(expected_rewards.shape[0]) * min_rew
         mask = posterior_belief >= thresholds
         p_star = mask.sum(0) / mask.shape[0]
         if_star = (posterior_belief * mask).sum(0) / (mask.sum(0) + 1e-12)
-        # else_star = (posterior_belief * (1 - mask)).sum(0) / (
-        #     (1 - mask).sum(0) + 1e-12
-        # )
-        # variances = (
-        #     p_star * (if_star - expected_rewards) ** 2
-        #     + (1 - p_star) * (else_star - expected_rewards) ** 2
-        # )
         variances = p_star * (if_star - expected_rewards) ** 2
-        # posterior_belief = self.sample_from_posterior(self.n_samples)
-        # sorted_beliefs = np.sort(posterior_belief, axis=1)
-        # thresholds = sorted_beliefs[:, -self.assortment_size].reshape(-1, 1)
-        # mask = posterior_belief >= thresholds
-        # p_star = mask.sum(0) / mask.shape[0]
-        # variances *= p_star
         variances = np.maximum(variances, 1e-12)
-        # a_star_t = np.sort(expected_rewards)[-self.assortment_size]
-        # a_s = self.posterior_parameters[0]
-        # b_s = self.posterior_parameters[1]
-        # ps = beta.cdf(1 / (a_star_t + 1), a=a_s, b=b_s)
-        # entropies_start = -(
-        #     ps * np.log(np.maximum(ps, 1e-12))
-        #     + (1 - ps) * np.log(np.maximum(1 - ps, +1e-12))
-        # )
-        # posterior_samples = 1 / beta.rvs(a=a_s, b=b_s) - 1
-        # new_as = np.ones(self.n_items)
-        # new_as += a_s
-        # new_bs = (geom.rvs(1 / (posterior_samples + 1)) - 1) + b_s
-        # new_ps = beta.cdf(1 / (a_star_t + 1), a=new_as, b=new_bs)
-        # new_entropies = -(
-        #     new_ps * np.log(np.maximum(new_ps, 1e-12))
-        #     + (1 - new_ps) * np.log(np.maximum(1 - new_ps, +1e-12))
-        # )
-        # reductions = np.maximum(entropies_start - new_entropies, 1e-8)
 
         x = cp.Variable(self.n_items, pos=True)
-        # deltas = cp.Parameter(self.n_items, pos=True)
         rewards = cp.Parameter(self.n_items,)
         gains = cp.Parameter(self.n_items, pos=True)
-        # exp_regret = r_star - x @ rewards
         deltas = r_star - x @ rewards
         exp_gain = x @ gains
         information_ratio = cp.quad_over_lin(deltas, exp_gain)
         objective = cp.Minimize(information_ratio)
-        constraints = [0 <= x, x <= 1, cp.sum(x) == self.assortment_size]
+        constraints = [0 <= x, x <= 1, cp.sum(x) == self.subset_size]
         prob = cp.Problem(objective, constraints,)
         rewards.value = expected_rewards
         gains.value = variances
@@ -160,14 +110,14 @@ class EpochSamplingCIDS(EpochSamplingAgent):
                     np.concatenate(
                         [
                             act_optimally(
-                                x.value, top_k=self.assortment_size - 1
+                                x.value, top_k=self.subset_size - 1
                             ),
                             np.array([remaning_item]),
                         ]
                     )
                 )
             else:
-                action = act_optimally(x.value, top_k=self.assortment_size)
+                action = act_optimally(x.value, top_k=self.subset_size)
             if self.c % 5 == 121234:
                 logging.debug(
                     f"a:{action},x:{(100 * x.value).astype(int)},rew:{(100 * expected_rewards).astype(int)},gain:{(100 * np.sqrt(variances)).astype(int)}"
@@ -186,18 +136,34 @@ class EpochSamplingCIDS(EpochSamplingAgent):
             logging.warning("solver error")
             posterior_belief = self.sample_from_posterior(1)
             action = act_optimally(
-                np.squeeze(posterior_belief), top_k=self.assortment_size
+                np.squeeze(posterior_belief), top_k=self.subset_size
             )
         except TypeError:
             logging.warning("solver error")
             posterior_belief = self.sample_from_posterior(1)
             action = act_optimally(
-                np.squeeze(posterior_belief), top_k=self.assortment_size
+                np.squeeze(posterior_belief), top_k=self.subset_size
             )
 
         self.current_action = action
         self.c += 1
         return action
+
+    def update_posterior(self, item_selected):
+        try:
+            item_selected = item_selected[0]
+        except TypeError:
+            assert(isinstance(item_selected, int))
+        if item_selected == self.n_items:  # picked up the outside option
+            self.epoch_ended = True
+            assert self.current_action is not None
+            self._n_is[self.current_action] += 1
+            for item_ix, n_picks in self.epoch_picks.items():
+                self._v_is[item_ix] += n_picks
+            self.epoch_picks = defaultdict(int)
+        else:
+            self.epoch_picks[item_selected] += 1
+            self.epoch_ended = False
 
 
 class EpochSamplingIDS(EpochSamplingAgent):
@@ -345,161 +311,3 @@ def best_mixture(delta, gain):
     index = np.argwhere(ratio == min_ratio)
     prob_ix, a1_ix, a2_ix = index[np.random.randint(index.shape[0]), :]
     return probs[prob_ix], a1_ix, a2_ix
-
-
-def sparse_information_ratio(
-    min_new_proposed, max_new_proposed, n_candidates, info_type, p0
-):
-    n_news = np.arange(min_new_proposed, max_new_proposed + 1)
-    alphas = n_news / n_candidates
-    deltas = 1 - np.concatenate(
-        [alphas[1:], alphas[:-1] + p0 * (1 - alphas[:-1])], axis=0
-    )
-    if info_type == "variance":
-        gains = alphas * (1 - alphas) ** 2 + (1 - alphas) * alphas ** 2
-        gains = np.concatenate([gains[1:], gains[:-1] * (1 - p0) ** 2], axis=0)
-
-    if info_type == "gain":
-        alphas[alphas < 1e-12] = 1e-12
-        alphas[alphas > 1.0 - 1e-12] = 1.0 - 1e-12
-        gains = alphas * np.log(n_candidates) - (1 - alphas) * np.log(
-            1 - alphas
-        )
-        assert not np.isinf(gains).any()
-        gains = np.concatenate([gains[1:], gains[:-1]], axis=0)
-    assert deltas.shape[0] == 2 * (max_new_proposed - min_new_proposed)
-    return deltas, gains
-
-
-class SparseIDS(Agent):
-    def __init__(
-        self, k, n, fallback_proba, fallback_weight, info_type, **kwargs
-    ):
-        super().__init__(k, n)
-        self.info_type = info_type
-        assert info_type in {"variance", "gain"}
-        self.fallback_proba = fallback_proba
-        self.fallback_weight = fallback_weight
-        assert fallback_proba < 1.0 and fallback_proba > 0.0
-        assert (
-            np.abs(fallback_proba - fallback_weight / (1.0 + fallback_weight))
-            < 1e-5
-        )
-        self.reset()
-
-    def reset(self):
-        self.top_item_index = None
-        self.normal_items_indices = np.arange(1, self.n_items, dtype=int)
-        self.possibly_top = np.ones(self.n_items, dtype=int)
-        self.possibly_top[0] = 0
-        self.to_assess = self.possibly_top.sum()
-
-    def sample_from_posterior(self, n_samples: int) -> np.ndarray:
-        """
-        :param n_samples: number of posterior samples desired
-        :return samples: item preferences for each sample, size (n_samples, N)
-        """
-        samples = np.zeros(shape=(n_samples, self.n_items))
-        if self.top_item_index is not None:
-            # If we found the top item
-            # Posterior is deterministic
-            samples[:, self.top_item_index] = np.inf
-            samples[:, 0] = self.fallback_weight
-        else:
-            # Sample top item randomly
-            top_item_guesses = np.random.choice(
-                self.normal_items_indices,
-                replace=True,
-                size=n_samples,
-                p=self.possibly_top[1:] / self.possibly_top[1:].sum(),
-            )
-            samples[np.arange(n_samples), top_item_guesses] = np.inf
-        samples[:, 0] = self.fallback_weight
-        return samples
-
-    def update(self, item_selected):
-        if (item_selected > 0) and (item_selected < self.n_items):
-            # Found the top item, which is the item selected
-            self.top_item_index = item_selected
-        else:
-            # Top item was not in the assortment proposed
-            self.possibly_top[self.current_action] = 0
-            self.to_assess = self.possibly_top.sum()
-        reward = self.perceive_reward(item_selected)
-        return reward
-
-    def act(self):
-        action = self.action_selection()
-        self.current_action = action
-        assert (
-            self.top_item_index in action
-            if self.top_item_index is not None
-            else True
-        )
-        return action
-
-    def action_selection(self):
-        if self.top_item_index is None:
-            fallback_taken, n_new = self.optimal_ids_action_parameters()
-            action = self.sample_from_params(fallback_taken, n_new)
-            return action
-        else:
-            return act_optimally(
-                np.squeeze(self.sample_from_posterior(1)),
-                top_k=self.assortment_size,
-            )
-
-    def optimal_ids_action_parameters(self):
-        min_new = max(
-            0, self.assortment_size - (self.n_items - self.to_assess)
-        )
-        max_new = min(self.assortment_size, self.to_assess)
-
-        deltas, gains = sparse_information_ratio(
-            min_new_proposed=min_new,
-            max_new_proposed=max_new,
-            n_candidates=self.to_assess,
-            info_type=self.info_type,
-            p0=self.fallback_proba,
-        )  # double the size
-
-        prob, a1_raw, a2_raw = best_mixture(delta=deltas, gain=gains)
-
-        a1_f = 1 if a1_raw >= (max_new - min_new) else 0
-        a1 = (a1_f, min_new + (a1_raw + 1) // 2 + 1 - 2 * a1_f)
-        a2_f = 1 if a2_raw >= (max_new - min_new) else 0
-        a2 = (a2_f, min_new + (a2_raw + 1) // 2 + 1 - 2 * a2_f)
-        assert (a1[1] >= min_new) and (a1[1] <= max_new)
-        assert (a2[1] >= min_new) and (a2[1] <= max_new)
-        return a1 if np.random.rand() < prob else a2
-
-    def sample_from_params(self, fallback_taken, n_new):
-        assert (n_new + fallback_taken) <= self.assortment_size
-        new_items = np.random.choice(
-            self.normal_items_indices,
-            replace=False,
-            size=n_new,
-            p=self.possibly_top[1:] / self.possibly_top[1:].sum(),
-        )
-        old_items = (
-            np.random.choice(
-                self.normal_items_indices,
-                replace=False,
-                size=self.assortment_size - n_new - fallback_taken,
-                p=(1 - self.possibly_top[1:])
-                / (1 - self.possibly_top[1:]).sum(),
-            )
-            if self.assortment_size - n_new - fallback_taken
-            else np.array([], dtype=int)
-        )
-        action = np.concatenate(
-            [
-                old_items,
-                new_items,
-                np.array([0], dtype=int)
-                if fallback_taken
-                else np.array([], dtype=int),
-            ],
-            axis=0,
-        )
-        return action

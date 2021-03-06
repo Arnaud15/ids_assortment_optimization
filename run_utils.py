@@ -11,7 +11,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from env import AssortmentEnvironment, BernoulliSemi, CombEnv
-from base_agents import Agent
+from base_agents import BayesAgent
 from args import (
     BAD_ITEM_CONSTANT,
     TOP_ITEM_CONSTANT,
@@ -86,7 +86,7 @@ def args_to_agent_name(args: Namespace,) -> Tuple[str, str]:
 
 
 def run_episode(
-    envnmt: CombEnv, actor: Agent, n_steps: int,
+    envnmt: CombEnv, actor: BayesAgent, n_steps: int,
 ) -> Tuple[np.ndarray, dict]:
     """
     :param n_steps: simulation horizon
@@ -102,7 +102,7 @@ def run_episode(
         # act / step / update
         assortment = actor.act()
         obs, reward = envnmt.step(assortment)
-        actor.update(obs)
+        actor.update_posterior(obs)
         # Store expected reward, observation
         rewards[ix] = reward
     print(
