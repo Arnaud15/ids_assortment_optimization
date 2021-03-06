@@ -26,7 +26,7 @@ class EpochSamplingCIDS(EpochSamplingTS):
         EpochSamplingTS.__init__(
             self, k, n, sampling=False,
         )
-        self.n_samples = 15
+        self.n_samples = 200
         assert info_type in {"variance", "gain"}
         self.info_type = info_type
 
@@ -35,12 +35,14 @@ class EpochSamplingCIDS(EpochSamplingTS):
         regrets = expected_regrets(
             posterior_belief=posterior_belief, assortment_size=self.subset_size
         )
-        variances = var_if_a_star(
-           posterior_belief=posterior_belief, assortment_size=self.subset_size
-        )
-        # variances = kl_ids(
-        #      posterior_belief=posterior_belief, subset_size=self.subset_size
-        # )
+        if self.info_type == "gain":
+            variances = kl_ids(
+                 posterior_belief=posterior_belief, subset_size=self.subset_size
+            )
+        else:
+            variances = var_if_a_star(
+               posterior_belief=posterior_belief, assortment_size=self.subset_size
+            )
 
         action = solve_cvx(
             regrets=regrets,
