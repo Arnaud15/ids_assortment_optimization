@@ -13,10 +13,55 @@ from ids_utils import (
     info_gain_step,
     delta_step,
 )
+from base_agents import x_beta_sampling
 from env import act_optimally, possible_actions
 from ts_agents import EpochSamplingTS
 import numpy as np
 import logging
+
+
+TS_CS_NUM = 10
+
+
+class EpochSamplingCIDS2(EpochSamplingTS):
+    def __init__(
+        self, k, n, n_samples, info_type, **kwargs,
+    ):
+        EpochSamplingTS.__init__(
+            self, k, n, sampling=False,
+        )
+        self.n_samples = 200
+
+    def proposal(self):
+        correlated_sample = x_beta_sampling(
+            a_s=self._n_is,
+            b_s=self._v_is,
+            correlated_sampling=self.correlated_sampling,
+            n_samples=TS_CS_NUM,
+        )
+        posterior_belief = self.sample_from_posterior(self.n_samples)
+        regrets = expected_regrets(
+            posterior_belief=posterior_belief, assortment_size=self.subset_size
+        )
+        if self.info_type == "gain":
+            variances = kl_ids(
+                posterior_belief=posterior_belief, subset_size=self.subset_size
+            )
+        else:
+            variances = var_if_a_star(
+                posterior_belief=posterior_belief,
+                assortment_size=self.subset_size,
+            )
+
+        action = solve_cvx(
+            regrets=regrets,
+            variances=variances,
+            subset_size=self.subset_size,
+            n_items=self.n_items,
+        )
+
+        self.current_action = action
+        return action
 
 
 class EpochSamplingCIDS(EpochSamplingTS):
@@ -37,11 +82,12 @@ class EpochSamplingCIDS(EpochSamplingTS):
         )
         if self.info_type == "gain":
             variances = kl_ids(
-                 posterior_belief=posterior_belief, subset_size=self.subset_size
+                posterior_belief=posterior_belief, subset_size=self.subset_size
             )
         else:
             variances = var_if_a_star(
-               posterior_belief=posterior_belief, assortment_size=self.subset_size
+                posterior_belief=posterior_belief,
+                assortment_size=self.subset_size,
             )
 
         action = solve_cvx(

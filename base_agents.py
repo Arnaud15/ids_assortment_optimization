@@ -81,9 +81,11 @@ def x_beta_sampling(
                 (b_s / (a_s - 1)) * ((b_s / (a_s - 1)) + 1) / (a_s - 2)
             )
         theta_sampled = np.random.randn(n_samples, 1)
-        return gaussian_means.reshape(
-            1, -1
-        ) + theta_sampled * gaussian_stds.reshape(1, -1)
+        return (
+            gaussian_means.reshape(1, -1)
+            + theta_sampled * gaussian_stds.reshape(1, -1)
+            + np.random.randn(n_samples, a_s.shape[0]) * 1e-3
+        )
     else:
         n_items = a_s.shape[0]
         return (

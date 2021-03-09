@@ -120,7 +120,9 @@ def kl_ids(posterior_belief, subset_size):
     thresholds = sorted_beliefs[:, -subset_size].reshape(-1, 1)
     mask = posterior_belief >= thresholds
     p_star = mask.sum(0) / mask.shape[0]
-    p_0_star = ((1 / (1.0 + posterior_belief)) * mask).sum(0) / (mask.sum(0) + 1e-12)
+    p_0_star = ((1 / (1.0 + posterior_belief)) * mask).sum(0) / (
+        mask.sum(0) + 1e-12
+    )
     p_0_star_safe = np.clip(p_0_star, a_min=1e-12, a_max=1.0 - 1e-12)
     p_0 = (1 / (1.0 + posterior_belief)).mean(0)
     p_0_safe = np.clip(p_0, a_min=1e-12, a_max=1.0 - 1e-12)
