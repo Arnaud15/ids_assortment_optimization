@@ -13,10 +13,12 @@ from ids_utils import (
     info_gain_step,
     delta_step,
 )
+from jax_utils import *
 from base_agents import x_beta_sampling
 from env import act_optimally, possible_actions
 from ts_agents import EpochSamplingTS
 import numpy as np
+import jax.numpy as jnp
 import logging
 
 
@@ -31,34 +33,60 @@ class EpochSamplingCIDS2(EpochSamplingTS):
             self, k, n, sampling=False,
         )
         self.n_samples = 200
+        self.hasher = self.n_items ** jnp.arange(self.subset_size)
+        self.get_top_actions = top_actions_factory(self.subset_size)
+        self.hash_actions = hash_actions_factory(
+            hasher=self.n_items ** jnp.arange(self.subset_size)
+        )
+        self.expected_rewards = all_er()
+        self.flat_rewards = flat_er()
+        self.get_variances = variances_factory()
 
-    def proposal(self):
+    def strict_ts_cs_actions(self):
         correlated_sample = x_beta_sampling(
             a_s=self._n_is,
             b_s=self._v_is,
             correlated_sampling=self.correlated_sampling,
             n_samples=TS_CS_NUM,
         )
-        posterior_belief = self.sample_from_posterior(self.n_samples)
-        regrets = expected_regrets(
-            posterior_belief=posterior_belief, assortment_size=self.subset_size
-        )
-        if self.info_type == "gain":
-            variances = kl_ids(
-                posterior_belief=posterior_belief, subset_size=self.subset_size
-            )
-        else:
-            variances = var_if_a_star(
-                posterior_belief=posterior_belief,
-                assortment_size=self.subset_size,
-            )
+        correlated_actions = self.get_top_actions(correlated_sample)
+        hashed_correlated_actions = self.hash_actions(correlated_actions)
+        _, ixs_corr = jnp.unique(hashed_correlated_actions, True)
+        return correlated_actions[ixs_corr, :]
 
-        action = solve_cvx(
-            regrets=regrets,
-            variances=variances,
-            subset_size=self.subset_size,
-            n_items=self.n_items,
+    def proposal(self):
+        ts_cs_actions = self.strict_ts_cs_actions()
+
+        posterior_belief = self.sample_from_posterior(self.n_samples)
+
+        expected_rewards_all = self.expected_rewards(
+            posterior_belief, ts_cs_actions
         )
+        means = jnp.mean(expected_rewards_all, axis=1)
+        top_actions = self.get_top_actions(posterior_belief)
+        best_expected_reward_per_sample = self.flat_rewards(
+            posterior_belief, top_actions
+        )
+        r_star = jnp.mean(best_expected_reward_per_sample)
+        regrets = r_star - means
+
+        hashed_top_actions = self.hash_actions(top_actions)
+        _, unique_ixs, row_to_uix, counts = jnp.unique(
+            hashed_top_actions, True, True, True
+        )
+        variances = self.get_variances(
+            row_to_uix,
+            unique_ixs.shape[0],
+            counts,
+            counts / counts.sum(),
+            expected_rewards_all,
+            means,
+        )
+        variances = jnp.maximum(variances, 1e-12)
+
+        # action = solve_mixture_jax()
+        action_ix = jnp.argmin(regrets ** 2 / variances)
+        action = ts_cs_actions[action_ix]
 
         self.current_action = action
         return action
