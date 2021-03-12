@@ -89,7 +89,7 @@ class EpochSamplingCIDS2(EpochSamplingTS):
         action = ts_cs_actions[action_ix]
 
         self.current_action = action
-        return action
+        return action, regrets, variances
 
 
 class EpochSamplingCIDS(EpochSamplingTS):
