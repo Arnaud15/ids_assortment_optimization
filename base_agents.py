@@ -62,8 +62,7 @@ class RandomAgent(BayesAgent):
 
 
 def x_beta_sampling(
-    a_s, b_s, n_samples: int, correlated_sampling: bool
-) -> np.ndarray:
+        a_s, b_s, n_samples: int, correlated_sampling: bool, input_thetas: np.ndarray = None) -> np.ndarray:
     """
     n_samples: how many samples to draw from the posterior
     returns: 2D array of shape (n_samples, N_items) of posterior samples
@@ -72,6 +71,12 @@ def x_beta_sampling(
     assert len(a_s.shape) == 1
     assert len(b_s.shape) == 1
     if correlated_sampling:
+        if n_samples:
+            theta_sampled = np.random.randn(n_samples, 1)
+        else:
+            assert input_thetas is not None
+            theta_sampled = input_thetas.reshape(-1, 1)
+            n_samples = theta_sampled.shape[0]
         if PAPER_UNDEFINED_PRIOR:
             gaussian_means = b_s / a_s
             gaussian_stds = np.sqrt(b_s / a_s * ((b_s / a_s) + 1) / a_s)
@@ -80,7 +85,6 @@ def x_beta_sampling(
             gaussian_stds = np.sqrt(
                 (b_s / (a_s - 1)) * ((b_s / (a_s - 1)) + 1) / (a_s - 2)
             )
-        theta_sampled = np.random.randn(n_samples, 1)
         return (
             gaussian_means.reshape(1, -1)
             + theta_sampled * gaussian_stds.reshape(1, -1)

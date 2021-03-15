@@ -1,9 +1,11 @@
 import sys
+import logging
+logging.basicConfig(level=logging.INFO, filename='myapp.log', filemode='w')
 import os
 from env import AssortmentEnvironment
 from base_agents import RandomAgent
 from ts_agents import EpochSamplingTS
-from ids_agents import EpochSamplingIDS, EpochSamplingCIDS
+from ids_agents import EpochSamplingIDS, EpochSamplingThompsonIDS, EpochSamplingCorrIDS
 from run_utils import (
     args_to_exp_id,
     args_to_agent_name,
@@ -17,7 +19,6 @@ from run_utils import (
 )
 from args import get_experiment_args, PLOTS_FOLDER
 import matplotlib.pyplot as plt
-import logging
 from tqdm import tqdm
 
 
@@ -27,7 +28,8 @@ AGENTS = {
     "erd": RandomAgent,
     "ets": EpochSamplingTS,
     "eids": EpochSamplingIDS,
-    "ecids": EpochSamplingCIDS,
+    "etids": EpochSamplingThompsonIDS,
+    "ecids": EpochSamplingCorrIDS,
 }
 
 
@@ -38,11 +40,6 @@ def run_from_args(run_args, exp_name):
     a given env type.
     """
     assert run_args.agent is not None, "Agent not specified for 'run' script."
-    logging.basicConfig(
-        level=logging.DEBUG,
-        filename="logs.log",
-        format="%(levelname)s:%(message)s",
-    )
 
     agent_key, agent_name = args_to_agent_name(run_args)
     print(f"Agent ID is: {agent_name}.")

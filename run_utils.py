@@ -70,17 +70,7 @@ def args_to_agent_name(args: Namespace,) -> Tuple[str, str]:
             agent_name += optim_p
     else:
         assert agent_name[-3:] == "IDS"
-        if "CIDS" not in agent_name:
-            print("Not ECIDS")
-            if args.info_type == "variance":
-                agent_name = agent_name[:-3] + "V" + agent_name[-3:]
-            agent_name += args.objective
-            if args.objective == "lambda":
-                agent_name += args.scaling
-            agent_name += f"M{args.M}"
-            agent_name += f"dyn{args.dynamics}"
-        else:
-            agent_name += args.info_type
+        agent_name += args.info_type
     return agent_key, agent_name
 
 

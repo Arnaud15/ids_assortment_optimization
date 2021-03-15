@@ -2,6 +2,7 @@ import jax
 from jax import jit, vmap
 import jax.numpy as jnp
 import numpy as np
+import logging
 
 DISCRETIZATION_IDS = jnp.linspace(0.0, 1.0, num=15)[:-1]
 
@@ -31,7 +32,7 @@ def flat_ix_to_a1_a2_rho(flat_ix, n_actions, discretization_size):
     return ix, iy, iz
 
 
-def solve_mixture_jax(regrets, variances, discretization_size):
+def solve_mixture_jax(regrets, variances):
     idx_flat = info_ratio_mapped(
         regrets, regrets, variances, variances, DISCRETIZATION_IDS
     ).argmin()
@@ -40,7 +41,10 @@ def solve_mixture_jax(regrets, variances, discretization_size):
         n_actions=regrets.shape[0],
         discretization_size=DISCRETIZATION_IDS.shape[0],
     )
-
+    logging.info(f"{ix}, {iy}, {iz}")
+    logging.info(f"rho: {DISCRETIZATION_IDS[iz]:.2f}")
+    logging.info(f"a1(r, g): {regrets[ix]:.2f}, {variances[ix]:.2f}")
+    logging.info(f"a2(r, g): {regrets[iy]:.2f}, {variances[iy]:.2f}")
     if np.random.rand() <= DISCRETIZATION_IDS[iz]:
         return ix
     else:

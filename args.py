@@ -10,7 +10,7 @@ if not os.path.isdir(AGG_OUTPUTS_FOLDER):
 PLOTS_FOLDER = "plots"
 if not os.path.isdir(PLOTS_FOLDER):
     os.makedirs(PLOTS_FOLDER)
-SUPPORTED_AGENTS = ["ts", "ids", "rd", "cids"]
+SUPPORTED_AGENTS = ["ts", "ids", "rd", "cids", "tids"]
 
 
 def get_experiment_args():

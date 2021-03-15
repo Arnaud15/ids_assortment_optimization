@@ -18,21 +18,22 @@ from base_agents import x_beta_sampling
 from env import act_optimally, possible_actions
 from ts_agents import EpochSamplingTS
 import numpy as np
+import scipy.stats as sts
 import jax.numpy as jnp
 import logging
 
 
-TS_CS_NUM = 10
+THETAS = sts.norm.isf(np.linspace(0.999, 0.001, num=9))
 
 
-class EpochSamplingCIDS2(EpochSamplingTS):
+class EpochSamplingCorrIDS(EpochSamplingTS):
     def __init__(
         self, k, n, n_samples, info_type, **kwargs,
     ):
         EpochSamplingTS.__init__(
             self, k, n, sampling=False,
         )
-        self.n_samples = 200
+        self.n_samples = 5
         self.hasher = self.n_items ** jnp.arange(self.subset_size)
         self.get_top_actions = top_actions_factory(self.subset_size)
         self.hash_actions = hash_actions_factory(
@@ -46,12 +47,16 @@ class EpochSamplingCIDS2(EpochSamplingTS):
         correlated_sample = x_beta_sampling(
             a_s=self._n_is,
             b_s=self._v_is,
-            correlated_sampling=self.correlated_sampling,
-            n_samples=TS_CS_NUM,
+            correlated_sampling=True,
+            n_samples=0,
+            input_thetas=THETAS,
         )
         correlated_actions = self.get_top_actions(correlated_sample)
         hashed_correlated_actions = self.hash_actions(correlated_actions)
         _, ixs_corr = jnp.unique(hashed_correlated_actions, True)
+        logging.info(
+            f"{THETAS.shape[0]} thetas, {ixs_corr.shape[0]} actual correlated assortments"
+        )
         return correlated_actions[ixs_corr, :]
 
     def proposal(self):
@@ -68,12 +73,14 @@ class EpochSamplingCIDS2(EpochSamplingTS):
             posterior_belief, top_actions
         )
         r_star = jnp.mean(best_expected_reward_per_sample)
+        logging.info(f"r_star: {r_star:.2f}")
         regrets = r_star - means
 
         hashed_top_actions = self.hash_actions(top_actions)
         _, unique_ixs, row_to_uix, counts = jnp.unique(
             hashed_top_actions, True, True, True
         )
+        logging.info(f"{unique_ixs.shape[0]} distinct top actions")
         variances = self.get_variances(
             row_to_uix,
             unique_ixs.shape[0],
@@ -84,15 +91,14 @@ class EpochSamplingCIDS2(EpochSamplingTS):
         )
         variances = jnp.maximum(variances, 1e-12)
 
-        # action = solve_mixture_jax()
-        action_ix = jnp.argmin(regrets ** 2 / variances)
-        action = ts_cs_actions[action_ix]
+        action_ix = solve_mixture_jax(regrets=regrets, variances=variances,)
+        action = np.array(ts_cs_actions[action_ix])
 
         self.current_action = action
-        return action, regrets, variances
+        return action
 
 
-class EpochSamplingCIDS(EpochSamplingTS):
+class EpochSamplingThompsonIDS(EpochSamplingTS):
     def __init__(
         self, k, n, n_samples, info_type, **kwargs,
     ):
