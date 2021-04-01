@@ -23,7 +23,7 @@ import jax.numpy as jnp
 import logging
 
 
-THETAS = sts.norm.isf(np.linspace(0.999, 0.001, num=9))
+THETAS = sts.norm.isf(np.linspace(0.99999, 0.00001, num=15))
 
 
 class EpochSamplingCorrIDS(EpochSamplingTS):
@@ -33,7 +33,7 @@ class EpochSamplingCorrIDS(EpochSamplingTS):
         EpochSamplingTS.__init__(
             self, k, n, sampling=False,
         )
-        self.n_samples = 5
+        self.n_samples = 150
         self.hasher = self.n_items ** jnp.arange(self.subset_size)
         self.get_top_actions = top_actions_factory(self.subset_size)
         self.hash_actions = hash_actions_factory(
@@ -50,17 +50,22 @@ class EpochSamplingCorrIDS(EpochSamplingTS):
             correlated_sampling=True,
             n_samples=0,
             input_thetas=THETAS,
-        )
+        ) # shape (n_thetas, n_items)
+        #logging.info(correlated_sample[:, :5])
         correlated_actions = self.get_top_actions(correlated_sample)
         hashed_correlated_actions = self.hash_actions(correlated_actions)
         _, ixs_corr = jnp.unique(hashed_correlated_actions, True)
         logging.info(
-            f"{THETAS.shape[0]} thetas, {ixs_corr.shape[0]} actual correlated assortments"
+           f"{THETAS.shape[0]} thetas, {ixs_corr.shape[0]} actual correlated assortments"
         )
+        #logging.info(correlated_actions[ixs_corr, :])
+        logging.info(self._n_is)
+        logging.info(self._v_is)
         return correlated_actions[ixs_corr, :]
 
     def proposal(self):
         ts_cs_actions = self.strict_ts_cs_actions()
+        #logging.info(ts_cs_actions)
 
         posterior_belief = self.sample_from_posterior(self.n_samples)
 
@@ -94,6 +99,7 @@ class EpochSamplingCorrIDS(EpochSamplingTS):
         action_ix = solve_mixture_jax(regrets=regrets, variances=variances,)
         action = np.array(ts_cs_actions[action_ix])
 
+        logging.info(f"action: {action}")
         self.current_action = action
         return action
 
