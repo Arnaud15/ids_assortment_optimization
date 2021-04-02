@@ -11,6 +11,31 @@ RHO_VALUES = np.linspace(start=0.0, stop=1.0, num=DISCRETIZATION_IDS)
 
 
 @numba.jit(nopython=True)
+def compute_variances_numba(
+    expected_rews, means, n_top_actions, n_actions, n_samples, row_to_uix, counts, probas_top
+):
+    variances = np.zeros(n_actions)
+    expected_rew_a_top_a = np.zeros((n_actions, n_top_actions))
+
+    row_ix = 0
+    for top_a_ix in row_to_uix:
+        for a_ix in range(n_actions):
+            expected_rew_a_top_a[a_ix, top_a_ix] += expected_rews[a_ix, row_ix]
+        row_ix += 1
+    expected_rew_a_top_a /= counts
+
+    for a_ix in range(n_actions):
+        var_ix = 0.0
+        for best_a_ix in range(n_top_actions):
+            var_ix += (
+                probas_top[best_a_ix]
+                * (expected_rew_a_top_a[a_ix, best_a_ix] - means[a_ix]) ** 2
+            )
+        variances[a_ix] = var_ix
+    return variances
+
+
+@numba.jit(nopython=True)
 def info_gain_step(action, sampled_preferences, actions_star, counts, thetas):
     """
     :param action: 1D array of size (K,) with the indices of the current action

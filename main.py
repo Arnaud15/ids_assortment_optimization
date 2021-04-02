@@ -1,11 +1,16 @@
 import sys
 import logging
-logging.basicConfig(level=logging.INFO, filename='myapp.log', filemode='w')
+
+logging.basicConfig(level=logging.INFO, filename="myapp.log", filemode="w")
 import os
 from env import AssortmentEnvironment
 from base_agents import RandomAgent
 from ts_agents import EpochSamplingTS
-from ids_agents import EpochSamplingIDS, EpochSamplingThompsonIDS, EpochSamplingCorrIDS
+from ids_agents import (
+    EpochSamplingIDS,
+    EpochSamplingThompsonIDS,
+    EpochSamplingCorrIDS,
+)
 from run_utils import (
     args_to_exp_id,
     args_to_agent_name,

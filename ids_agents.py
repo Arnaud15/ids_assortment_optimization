@@ -8,6 +8,7 @@ from cids_utils import (
 )
 from ids_utils import (
     InformationDirectedSampler,
+    compute_variances_numba,
     ids_exact_action,
     information_ratio,
     info_gain_step,
@@ -41,7 +42,7 @@ class EpochSamplingCorrIDS(EpochSamplingTS):
         )
         self.expected_rewards = all_er()
         self.flat_rewards = flat_er()
-        self.get_variances = variances_factory()
+        self.get_variances = compute_variances_numba
 
     def strict_ts_cs_actions(self):
         correlated_sample = x_beta_sampling(
@@ -50,28 +51,28 @@ class EpochSamplingCorrIDS(EpochSamplingTS):
             correlated_sampling=True,
             n_samples=0,
             input_thetas=THETAS,
-        ) # shape (n_thetas, n_items)
-        #logging.info(correlated_sample[:, :5])
+        )  # shape (n_thetas, n_items)
+        # logging.info(correlated_sample[:, :5])
         correlated_actions = self.get_top_actions(correlated_sample)
         hashed_correlated_actions = self.hash_actions(correlated_actions)
         _, ixs_corr = jnp.unique(hashed_correlated_actions, True)
         logging.info(
-           f"{THETAS.shape[0]} thetas, {ixs_corr.shape[0]} actual correlated assortments"
+            f"{THETAS.shape[0]} thetas, {ixs_corr.shape[0]} actual correlated assortments"
         )
-        #logging.info(correlated_actions[ixs_corr, :])
+        # logging.info(correlated_actions[ixs_corr, :])
         logging.info(self._n_is)
         logging.info(self._v_is)
         return correlated_actions[ixs_corr, :]
 
     def proposal(self):
         ts_cs_actions = self.strict_ts_cs_actions()
-        #logging.info(ts_cs_actions)
+        # logging.info(ts_cs_actions)
 
         posterior_belief = self.sample_from_posterior(self.n_samples)
 
         expected_rewards_all = self.expected_rewards(
             posterior_belief, ts_cs_actions
-        )
+        )  # shape n_actions, n_samples
         means = jnp.mean(expected_rewards_all, axis=1)
         top_actions = self.get_top_actions(posterior_belief)
         best_expected_reward_per_sample = self.flat_rewards(
@@ -86,13 +87,15 @@ class EpochSamplingCorrIDS(EpochSamplingTS):
             hashed_top_actions, True, True, True
         )
         logging.info(f"{unique_ixs.shape[0]} distinct top actions")
-        variances = self.get_variances(
-            row_to_uix,
-            unique_ixs.shape[0],
-            counts,
-            counts / counts.sum(),
-            expected_rewards_all,
-            means,
+        variances = compute_variances_numba(
+            expected_rews=np.asarray(expected_rewards_all),
+            counts=np.asarray(counts).reshape(1, -1),
+            means=np.asarray(means),
+            n_top_actions=unique_ixs.shape[0],
+            n_actions=expected_rewards_all.shape[0],
+            n_samples=expected_rewards_all.shape[1],
+            probas_top=np.asarray(counts / counts.sum()),
+            row_to_uix=np.asarray(row_to_uix),
         )
         variances = jnp.maximum(variances, 1e-12)
 

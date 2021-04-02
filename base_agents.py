@@ -62,7 +62,12 @@ class RandomAgent(BayesAgent):
 
 
 def x_beta_sampling(
-        a_s, b_s, n_samples: int, correlated_sampling: bool, input_thetas: np.ndarray = None) -> np.ndarray:
+    a_s,
+    b_s,
+    n_samples: int,
+    correlated_sampling: bool,
+    input_thetas: np.ndarray = None,
+) -> np.ndarray:
     """
     n_samples: how many samples to draw from the posterior
     returns: 2D array of shape (n_samples, N_items) of posterior samples

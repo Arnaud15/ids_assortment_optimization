@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 import logging
 
-DISCRETIZATION_IDS = jnp.linspace(0.0, 1.0, num=15)[:-1]
+DISCRETIZATION_IDS = jnp.linspace(0.0, 1.0, num=50)[:-1]
 
 
 @jit
@@ -32,10 +32,17 @@ def flat_ix_to_a1_a2_rho(flat_ix, n_actions, discretization_size):
     return ix, iy, iz
 
 
+def pparr(arr):
+    return [f"{x:.3f}" for x in np.array(arr).flatten()]
+
+
 def solve_mixture_jax(regrets, variances):
-    idx_flat = info_ratio_mapped(
+    info_ratios = info_ratio_mapped(
         regrets, regrets, variances, variances, DISCRETIZATION_IDS
-    ).argmin()
+    )
+    # logging.info(f"regrets: {pparr(regrets)}")
+    # logging.info(f"variances {pparr(variances)}")
+    idx_flat = info_ratios.argmin()
     (ix, iy, iz) = flat_ix_to_a1_a2_rho(
         idx_flat,
         n_actions=regrets.shape[0],
@@ -43,8 +50,9 @@ def solve_mixture_jax(regrets, variances):
     )
     logging.info(f"{ix}, {iy}, {iz}")
     logging.info(f"rho: {DISCRETIZATION_IDS[iz]:.2f}")
-    logging.info(f"a1(r, g): {regrets[ix]:.2f}, {variances[ix]:.2f}")
-    logging.info(f"a2(r, g): {regrets[iy]:.2f}, {variances[iy]:.2f}")
+    # logging.info(f"{info_ratios.min():.3f}")
+    # logging.info(f"a1(r, g): {regrets[ix]:.2f}, {variances[ix]:.2f}")
+    # logging.info(f"a2(r, g): {regrets[iy]:.2f}, {variances[iy]:.2f}")
     if np.random.rand() <= DISCRETIZATION_IDS[iz]:
         return ix
     else:
@@ -92,6 +100,8 @@ def all_er():
 
 
 def variances_factory():
+    jitted_exp = vmap(jit(expected_rewards_a_star), in_axes=[0, None, 0])
+
     def variance_single_action(
         row_to_a_star_ix,
         n_a_stars,
@@ -101,7 +111,7 @@ def variances_factory():
         mean_er_single_action,
     ):
         er_given_a_stars = (
-            vmap(jit(expected_rewards_a_star), in_axes=[0, None, 0])(
+            jitted_exp(
                 row_to_a_star_ix, jnp.zeros(n_a_stars), ers_single_action
             ).sum(0)
             / all_a_star_counts
