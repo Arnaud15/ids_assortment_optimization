@@ -25,6 +25,16 @@ def get_experiment_args():
         choices=["run", "agg", "plot"],
     )
 
+    # ENV SELECTED TO RUN EXP
+    parser.add_argument(
+        "--env",
+        type=str,
+        required=False,
+        default="assortment",
+        help="Choice of semi, assortment",
+        choices={"semi", "assortment"},
+    )
+
     # AGENT SELECTED TO RUN EXP
     parser.add_argument(
         "--agent",

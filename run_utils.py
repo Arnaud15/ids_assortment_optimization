@@ -54,7 +54,11 @@ def args_to_agent_name(args: Namespace,) -> Tuple[str, str]:
     if args.prior == "full_sparse":
         agent_key = args.agent
         agent_name = args.agent.upper()
+    elif args.env == "semi":
+        agent_key = "s" + args.agent
+        agent_name = args.agent.upper()
     else:
+        assert args.env == "assortment"
         agent_key = "e" + args.agent
         agent_name = "Epoch" + args.agent.upper()
     if agent_name[-2:] == "RD":
@@ -90,12 +94,13 @@ def run_episode(
     for ix in tqdm(range(n_steps)):
         # act / step / update
         assortment = actor.act()
-        obs, reward = envnmt.step(assortment)
-        actor.update_posterior(obs)
+        stepinfo = envnmt.step(assortment)
+        actor.update_posterior(stepinfo.obs)
         # Store expected reward, observation
-        rewards[ix] = reward
-    print(f"selected: {[envnmt.selections[i] for i in range(actor.n_items)]}")
-    print(f"proposed: {[envnmt.counts[i] for i in range(actor.n_items)]}")
+        rewards[ix] = stepinfo.reward
+    # print(envnmt._theta, actor._v_is / actor._n_is)
+    # print(f"selected: {[envnmt.selections[i] for i in range(actor.n_items)]}")
+    # print(f"proposed: {[envnmt.counts[i] for i in range(actor.n_items)]}")
     return rewards, actor.stored_info()
 
 

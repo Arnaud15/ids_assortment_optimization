@@ -3,7 +3,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO, filename="myapp.log", filemode="w")
 import os
-from env import AssortmentEnvironment
+from env import AssortmentEnvironment, BernoulliSemi
 from base_agents import RandomAgent
 from ts_agents import EpochSamplingTS
 from ids_agents import (
@@ -11,6 +11,7 @@ from ids_agents import (
     EpochSamplingThompsonIDS,
     EpochSamplingCorrIDS,
 )
+from semi_agents import ThompsonSemit, ThompsonIDS
 from run_utils import (
     args_to_exp_id,
     args_to_agent_name,
@@ -35,6 +36,8 @@ AGENTS = {
     "eids": EpochSamplingIDS,
     "etids": EpochSamplingThompsonIDS,
     "ecids": EpochSamplingCorrIDS,
+    "sids": ThompsonIDS,
+    "sts": ThompsonSemit,
 }
 
 
@@ -65,7 +68,10 @@ def run_from_args(run_args, exp_name):
             prior_type=run_args.prior,
             fallback_weight=proba_to_weight(run_args.p),
         )
-        env = AssortmentEnvironment(item_prefs=run_preferences)
+        if run_args.env == "semi":
+            env = BernoulliSemi(item_probas=run_preferences)
+        else:
+            env = AssortmentEnvironment(item_prefs=run_preferences)
         run_data = {"best_reward": env.r_star_from_subset_size(run_args.K)}
         rewards_run, actor_logs = run_episode(
             envnmt=env, actor=agent, n_steps=run_args.T,

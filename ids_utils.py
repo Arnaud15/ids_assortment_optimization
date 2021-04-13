@@ -12,7 +12,14 @@ RHO_VALUES = np.linspace(start=0.0, stop=1.0, num=DISCRETIZATION_IDS)
 
 @numba.jit(nopython=True)
 def compute_variances_numba(
-    expected_rews, means, n_top_actions, n_actions, n_samples, row_to_uix, counts, probas_top
+    expected_rews,
+    means,
+    n_top_actions,
+    n_actions,
+    n_samples,
+    row_to_uix,
+    counts,
+    probas_top,
 ):
     variances = np.zeros(n_actions)
     expected_rew_a_top_a = np.zeros((n_actions, n_top_actions))

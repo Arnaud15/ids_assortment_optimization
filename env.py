@@ -1,6 +1,7 @@
 import numpy as np
 import logging
 from collections import namedtuple
+from icecream import ic
 
 from abc import ABC, abstractmethod
 import warnings
@@ -72,6 +73,7 @@ class BernoulliSemi(CombEnv):
         items_ok = np.random.rand(self.n_items) <= self._theta
         subset_ok = items_ok[subset]
         items_selected = subset[subset_ok]
+        # ic(subset, items_ok, subset_ok, items_selected)
         self.selections = items_selected
         return StepInfo(
             obs=items_selected, reward=self.expected_reward(subset)
